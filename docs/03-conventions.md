@@ -256,6 +256,7 @@ export const active = (col: { deletedAt: any }) => isNull(col.deletedAt);
   - `SET NULL` (soft references where the parent's removal shouldn't cascade)
 
 - Cross-module FKs require a PR comment explaining the dependency. Reviewer confirms it's necessary.
+- Polymorphic columns are exempt from the `.references()` rule because no single FK target exists (e.g., `addresses.entity_id`, `activities.entity_id`, `entity_tags.entity_id`, `audit_log.record_id`). These store a UUID + a sibling `entity_table` text column; integrity is enforced at the application layer, not the schema.
 
 ### 3.8 Indexes
 
