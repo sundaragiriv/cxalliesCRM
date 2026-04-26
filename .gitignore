@@ -25,12 +25,16 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.example.json
 .idea/
+.claude/
 
 # Testing
 coverage/
 playwright-report/
 test-results/
 .nyc_output/
+
+# TypeScript incremental
+*.tsbuildinfo
 
 # Drizzle
 drizzle/meta/_journal.json.bak
