@@ -34,7 +34,7 @@ The 26 tickets group into **9 sections** mapping to the build sequence. Sections
 - Initialize Next.js 15 with App Router, TypeScript strict, Tailwind, shadcn/ui CLI
 - Set up pnpm workspace structure: `apps/web`, `packages/shared`
 - Add `docs/` directory with `00-vision.md`, `01-architecture.md`, `02-data-model.md`, `03-conventions.md`, `04-glossary.md`, `adr/0001` through `adr/0004` (already produced — drop them in)
-- Add `CLAUDE.md` and `.cursorrules` at repo root
+- Add `CLAUDE.md` at repo root (no `.cursorrules` — Claude Code in VS Code is the sole AI tool per source-docs v2)
 - Configure ESLint with the cross-module import rule from conventions §2.2
 - Set up Vitest with one passing smoke test
 - Set up Playwright config with one passing smoke test

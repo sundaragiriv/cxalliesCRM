@@ -142,6 +142,8 @@ Cross-module imports of internal directories fail CI via ESLint:
 | Type-only files | `types.ts` | (singular, public-facing per module) |
 | Index files | Avoid `index.ts` re-exports except at module public boundaries | |
 
+**Exception — shadcn/ui primitives.** Files vendored into `src/components/ui/` via the shadcn CLI keep the upstream lowercase-kebab convention (`button.tsx`, `dropdown-menu.tsx`) so `pnpm dlx shadcn@latest add ...` writes consistent files. The PascalCase rule applies to first-party React components everywhere else (e.g. `src/modules/{name}/components/ExpenseForm.tsx`).
+
 ### 2.4 Where things live (top-level)
 
 ```

@@ -18,6 +18,30 @@ All planning and design documentation is in [`docs/`](./docs/). Read in this ord
 7. [`docs/phase-1-tickets.md`](./docs/phase-1-tickets.md) — 27 atomic Phase 1 tickets
 8. [`docs/AI_Build_Playbook.md`](./docs/AI_Build_Playbook.md) — discipline for AI-assisted build
 
+## Quickstart
+
+Requires Node 22+ and pnpm 9+ (use `corepack enable` if pnpm is not installed).
+
+```bash
+pnpm install              # install workspace dependencies
+pnpm dev                  # start the Next.js dev server (http://localhost:3000)
+pnpm typecheck            # tsc --noEmit across all workspaces
+pnpm lint                 # ESLint across all workspaces
+pnpm test                 # Vitest unit tests
+pnpm test:e2e             # Playwright e2e (boots dev server automatically)
+pnpm format               # Prettier write
+```
+
+Workspace layout:
+
+```
+apps/web              # Next.js 15 app (App Router, React 19, Tailwind v4)
+packages/shared       # cross-module shared types
+docs/                 # planning artifacts; read 00-vision first
+```
+
+CI runs `typecheck + lint + test` on every push and PR to `main` (`.github/workflows/ci.yml`).
+
 ## For Claude Code
 
 [`CLAUDE.md`](./CLAUDE.md) at the repo root is the system prompt Claude Code reads at the start of every session. Keep it current.
