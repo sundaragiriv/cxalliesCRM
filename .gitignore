@@ -27,6 +27,9 @@ Thumbs.db
 .idea/
 .claude/
 
+# Per-machine AI agent prompts (CLAUDE.md is the canonical, repo-tracked one)
+AGENTS.md
+
 # Testing
 coverage/
 playwright-report/
