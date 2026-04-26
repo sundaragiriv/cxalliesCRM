@@ -127,7 +127,7 @@ The 26 tickets group into **9 sections** mapping to the build sequence. Sections
 - Implement `procedureWithAuth` middleware in `src/lib/trpc/middleware.ts`
 - Implement `withPermission` Server Action helper in `src/lib/auth/with-permission.ts`
 - Create permissions matrix in `src/lib/auth/permissions.ts` (5 roles, 11 modules)
-- Seed Owner user (Venkata) with password from env var
+- Seed Owner user (Venkata) with password from env var, plus Person-Party rows for Venkata and Poornima and the user→party link per data-model §16
 - Add audit log middleware in `src/lib/audit/with-audit.ts`
 
 **Out of scope:**

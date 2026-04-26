@@ -8,6 +8,34 @@
       "when": 1777236562656,
       "tag": "0000_talented_micromax",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777244050018,
+      "tag": "0001_auth_parties_files_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777244065975,
+      "tag": "0002_phase1_cross_module_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777244078871,
+      "tag": "0003_parties_fts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777244087835,
+      "tag": "0004_updated_at_function_and_triggers",
+      "breakpoints": true
     }
   ]
 }

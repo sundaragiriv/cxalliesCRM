@@ -108,7 +108,9 @@ A module may add subdirectories within `lib/`, `components/`, or `events/` as it
 | `types.ts` | Yes | Public types only |
 | `components/` | **No** | Module-private UI |
 | `lib/` | **No** | Module-private utilities |
-| `schema.ts` | **No** | Tables are module-owned; cross-module access via `api/` |
+| `schema.ts` | **From other schemas only** | Schemas may import each other to declare FKs and relations; application code (api/actions/components/lib) accesses tables via `api/` only |
+
+**Schema-layer exception.** `src/modules/*/schema.ts`, `src/db/shared-tables.ts`, `src/db/schema.ts`, and seed scripts under `src/db/seed/` may import each other freely. Drizzle's `.references()` and relation typing inherently couple schemas across modules (e.g., `parties` imports `users` for `entity_tags.tagged_by_user_id`; `files` imports both for upload attribution and org scoping); seeds write directly to schemas. The cross-module rule still blocks application code from reaching into another module's schema directly — read paths go through `api/`, write paths through `actions/`.
 
 Cross-module imports of internal directories fail CI via ESLint:
 
@@ -201,6 +203,9 @@ Per data model §1.5:
 | FK columns | `referenced_entity_singular_id` | `party_id`, `chart_of_accounts_id` |
 | Booleans | `is_X`, `has_X`, `was_X` | `is_billable`, `has_2fa_enabled` |
 | Money | `X_cents` (always `bigint`) | `amount_cents`, `total_cents` |
+| Slug | `slug` column on entities that need a stable lookup key | `cxallies`, `consulting`, `moonking-yt` |
+
+**Slug convention.** Where an entity needs a stable, human-readable lookup key (brands, business lines, entity codes), expose a `slug` column. Slugs are lowercase ASCII, hyphenated (kebab-case), and stable for the entity's lifetime — never regenerated when the display name changes. Uniqueness is enforced per `(organization_id, slug)`.
 
 ### 3.3 Standard columns on every table
 
@@ -292,6 +297,8 @@ Seed data lives in `src/db/seed/{name}.ts` and runs via `pnpm db:seed`. Phase 1 
 - Initial users (Venkata as Owner, Poornima placeholder)
 
 Seed is idempotent — running twice produces the same DB state.
+
+**Seeded data is data, not code.** Never hardcode a UUID of a seeded row as a constant in application code. Resolve at runtime via stable lookup key (slug for brands and business lines; `LIMIT 1` for the singleton organization; session context for the user's org once multi-tenant). The product will be sold to other tenants, and a hardcoded `00000000-…-001` baked into a query is a multi-tenant migration time bomb.
 
 ---
 

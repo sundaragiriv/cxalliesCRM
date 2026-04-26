@@ -58,6 +58,21 @@ export default [
     },
   },
 
+  // Data-layer override: schemas reference each other's tables for FKs, and
+  // seed scripts write directly to schemas. The cross-module rule still applies
+  // to all application code (api/actions/components/lib).
+  {
+    files: [
+      'apps/web/src/modules/*/schema.ts',
+      'apps/web/src/db/shared-tables.ts',
+      'apps/web/src/db/schema.ts',
+      'apps/web/src/db/seed/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
+
   // Shared package: plain TS, no Next plugin
   ...tseslint.configs.recommended.map((config) => ({
     ...config,

@@ -225,6 +225,7 @@ Per glossary §1. Brands roll up under Varahi Group; Business Lines roll up unde
 | Column | Type | Notes |
 |---|---|---|
 | `id`, `organization_id`, `created_at`, `updated_at`, `deleted_at` | | |
+| `slug` | `text NOT NULL` | Stable lookup key per conventions §3.2. Unique on `(organization_id, slug)`. |
 | `name` | `text NOT NULL` | "CXAllies", "Pravara.ai" |
 | `display_name` | `text NOT NULL` | |
 | `domain` | `text NULL` | "cxallies.com" |
@@ -1835,6 +1836,7 @@ export const brands = pgTable(
   {
     id: id(),
     organizationId: organizationId().references(() => organizations.id),
+    slug: text('slug').notNull(),
     name: text('name').notNull(),
     displayName: text('display_name').notNull(),
     domain: text('domain'),
@@ -1843,6 +1845,10 @@ export const brands = pgTable(
     ...standardLifecycle,
   },
   (t) => ({
+    orgSlugUnique: uniqueIndex('brands_org_slug_unique').on(
+      t.organizationId,
+      t.slug
+    ),
     orgNameIdx: index('brands_org_name_idx').on(t.organizationId, t.name),
   })
 );
