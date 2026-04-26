@@ -110,7 +110,14 @@ A module may add subdirectories within `lib/`, `components/`, or `events/` as it
 | `lib/` | **No** | Module-private utilities |
 | `schema.ts` | **From other schemas only** | Schemas may import each other to declare FKs and relations; application code (api/actions/components/lib) accesses tables via `api/` only |
 
-**Schema-layer exception.** `src/modules/*/schema.ts`, `src/db/shared-tables.ts`, `src/db/schema.ts`, and seed scripts under `src/db/seed/` may import each other freely. Drizzle's `.references()` and relation typing inherently couple schemas across modules (e.g., `parties` imports `users` for `entity_tags.tagged_by_user_id`; `files` imports both for upload attribution and org scoping); seeds write directly to schemas. The cross-module rule still blocks application code from reaching into another module's schema directly — read paths go through `api/`, write paths through `actions/`.
+**Schema-layer exception.** The following files may import any module's `schema.ts` freely:
+
+- `src/modules/*/schema.ts` — Drizzle's `.references()` and relation typing inherently couple schemas across modules (e.g., `parties` imports `users` for `entity_tags.tagged_by_user_id`; `files` imports both for upload attribution and org scoping).
+- `src/db/shared-tables.ts`, `src/db/schema.ts` — the shared tables and the schema index aggregate every module.
+- `src/db/seed/**/*.ts` — seeds write directly to schemas.
+- `src/lib/auth.ts`, `src/lib/auth/**/*.ts`, `src/lib/audit/**/*.ts` — auth wiring (Better Auth adapter, permission checks against `user_roles`) and the audit middleware (writing to `audit_log`) are data-layer infrastructure, not application logic.
+
+Application code (api/actions/components, module-internal lib) is still blocked from reaching into another module's schema directly — read paths go through `api/`, write paths through `actions/`.
 
 Cross-module imports of internal directories fail CI via ESLint:
 

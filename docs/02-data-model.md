@@ -111,7 +111,7 @@ Every business-relevant event writes to `activities` (defined in §13.1). Activi
 
 ## 2. Module: `auth`
 
-Owns authentication, authorization, sessions, and OAuth tokens.
+Owns authentication, authorization, sessions, and OAuth tokens. Schema reconciled with Better Auth in P1-04 (see `docs/adr/0001-modular-monolith.md` and ticket P1-04 commit message for the rationale).
 
 ### 2.1 `users`
 
@@ -119,15 +119,16 @@ Owns authentication, authorization, sessions, and OAuth tokens.
 |---|---|---|
 | `id`, `organization_id`, `created_at`, `updated_at`, `deleted_at` | (standard) | |
 | `email` | `text NOT NULL UNIQUE` | Login identifier |
-| `email_verified_at` | `timestamptz NULL` | |
-| `password_hash` | `text NOT NULL` | Better Auth managed |
-| `display_name` | `text NOT NULL` | |
+| `email_verified` | `boolean NOT NULL DEFAULT false` | Better Auth flag; verification timestamp captured in `audit_log` |
+| `display_name` | `text NOT NULL` | Better Auth `name` maps here via fields config |
 | `avatar_file_id` | `uuid NULL FK → files.id` | Profile picture |
 | `party_id` | `uuid NULL FK → parties.id` | Link to the Party record (Venkata is both User and Party) |
 | `timezone` | `text NOT NULL DEFAULT 'America/New_York'` | |
 | `locale` | `text NOT NULL DEFAULT 'en-US'` | |
-| `has_2fa_enabled` | `boolean NOT NULL DEFAULT false` | |
+| `has_2fa_enabled` | `boolean NOT NULL DEFAULT false` | Quick lookup flag; the secret lives on `auth_two_factor` |
 | `last_login_at` | `timestamptz NULL` | |
+
+Password hash moved to `auth_accounts` (Better Auth's unified-providers model). Verification timestamp moved to `audit_log` events.
 
 ### 2.2 `auth_sessions`
 
@@ -137,30 +138,59 @@ DB-backed sessions per ADR-0001 §7.1. Better Auth managed.
 |---|---|---|
 | `id` | `uuid PK` | |
 | `user_id` | `uuid NOT NULL FK → users.id ON DELETE CASCADE` | |
-| `token_hash` | `text NOT NULL UNIQUE` | SHA-256 of the opaque token |
+| `token` | `text NOT NULL UNIQUE` | Opaque token; Better Auth signs it with `BETTER_AUTH_SECRET` |
 | `expires_at` | `timestamptz NOT NULL` | |
 | `ip_address` | `inet NULL` | For audit |
 | `user_agent` | `text NULL` | For audit |
-| `created_at` | `timestamptz` | |
+| `created_at`, `updated_at` | `timestamptz` | |
 
 No `organization_id` (sessions are user-scoped, not org-scoped).
 
-### 2.3 `auth_oauth_tokens`
+### 2.3 `auth_accounts`
 
-Per ADR-0004 §4.2. Encrypted at rest.
+Unified accounts table per Better Auth. One row per `(user, provider_id)`. Replaces the prior `auth_oauth_tokens` table — credential (email/password) and OAuth providers all live here.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id`, `created_at`, `updated_at`, `deleted_at` | (standard) | |
 | `user_id` | `uuid NOT NULL FK → users.id ON DELETE CASCADE` | |
-| `provider` | `enum('google', 'microsoft')` | Microsoft reserved for future |
-| `access_token_encrypted` | `text NOT NULL` | AES-256-GCM |
-| `refresh_token_encrypted` | `text NOT NULL` | AES-256-GCM |
-| `expires_at` | `timestamptz NOT NULL` | |
-| `scopes` | `text[] NOT NULL` | |
-| `account_email` | `text NOT NULL` | Display |
+| `provider_id` | `text NOT NULL` | `'credential'`, `'google'`, `'microsoft'`, ... |
+| `account_id` | `text NOT NULL` | Email for credential; provider's external user ID for OAuth |
+| `password_hash` | `text NULL` | Set only for `provider_id = 'credential'`; Better Auth hashes |
+| `access_token_encrypted` | `text NULL` | OAuth providers; AES-256-GCM at rest |
+| `refresh_token_encrypted` | `text NULL` | |
+| `id_token` | `text NULL` | OIDC providers |
+| `access_token_expires_at`, `refresh_token_expires_at` | `timestamptz NULL` | |
+| `scope` | `text NULL` | Space-separated; Better Auth convention |
+| `account_email` | `text NULL` | Display |
 
-### 2.4 `roles`
+Unique on `(provider_id, account_id)`. Indexed on `(user_id, provider_id)`.
+
+### 2.4 `auth_verifications`
+
+Per Better Auth. Verification tokens for email-verification, password-reset, and similar flows.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid PK` | |
+| `identifier` | `text NOT NULL` | Typically the email being verified |
+| `value` | `text NOT NULL` | The token (or hash thereof) |
+| `expires_at` | `timestamptz NOT NULL` | |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+### 2.5 `auth_two_factor`
+
+Per Better Auth twoFactor plugin. One row per user with 2FA enabled.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid PK` | |
+| `user_id` | `uuid NOT NULL FK → users.id ON DELETE CASCADE`, **UNIQUE** | |
+| `secret_encrypted` | `text NOT NULL` | TOTP secret, AES-256-GCM at rest |
+| `backup_codes_encrypted` | `text NULL` | JSON array of one-time recovery codes |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+### 2.6 `roles`
 
 Seed table. Per glossary §12.
 
@@ -174,7 +204,7 @@ Seed table. Per glossary §12.
 
 No soft delete on system roles. No `organization_id` (roles are global definitions).
 
-### 2.5 `user_roles`
+### 2.7 `user_roles`
 
 Junction.
 
@@ -186,7 +216,7 @@ Junction.
 | `granted_by_user_id` | `uuid NULL FK → users.id` | |
 | **PK** | `(user_id, role_id)` | |
 
-### 2.6 Out of scope for Phase 1
+### 2.8 Out of scope for Phase 1
 
 - Custom permission overrides per user (Phase 2, ADR-0007)
 - API keys for programmatic access (Phase 5)

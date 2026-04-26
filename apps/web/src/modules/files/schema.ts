@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { pgTable, text, uuid, bigint, index, check } from 'drizzle-orm/pg-core'
 import { id, organizationId, standardLifecycle } from '@/db/shared'
 import { fileKindEnum } from '@/db/enums'
-import { users, authOauthTokens } from '@/modules/auth/schema'
+import { users, authAccounts } from '@/modules/auth/schema'
 import { organizations } from '@/modules/parties/schema'
 
 /**
@@ -18,7 +18,7 @@ export const files = pgTable(
     r2Key: text('r2_key'),
     r2Bucket: text('r2_bucket'),
     driveFileId: text('drive_file_id'),
-    driveAccountId: uuid('drive_account_id').references(() => authOauthTokens.id),
+    driveAccountId: uuid('drive_account_id').references(() => authAccounts.id),
     driveWebViewLink: text('drive_web_view_link'),
     filename: text('filename').notNull(),
     mimeType: text('mime_type').notNull(),

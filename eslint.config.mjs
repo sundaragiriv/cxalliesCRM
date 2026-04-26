@@ -58,15 +58,19 @@ export default [
     },
   },
 
-  // Data-layer override: schemas reference each other's tables for FKs, and
-  // seed scripts write directly to schemas. The cross-module rule still applies
-  // to all application code (api/actions/components/lib).
+  // Data-layer override: schemas reference each other's tables for FKs, seed
+  // scripts write directly to schemas, and the auth infrastructure (Better Auth
+  // adapter + permission checks) needs schema access to wire the auth instance.
+  // The cross-module rule still applies to all application code (api/actions/components/module-lib).
   {
     files: [
       'apps/web/src/modules/*/schema.ts',
       'apps/web/src/db/shared-tables.ts',
       'apps/web/src/db/schema.ts',
       'apps/web/src/db/seed/**/*.ts',
+      'apps/web/src/lib/auth.ts',
+      'apps/web/src/lib/auth/**/*.ts',
+      'apps/web/src/lib/audit/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

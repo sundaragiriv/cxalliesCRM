@@ -13,14 +13,15 @@ import {
   integer,
 } from 'drizzle-orm/pg-core'
 import { id, organizationId, standardLifecycle, timestamps } from '@/db/shared'
-import { oauthProviderEnum } from '@/db/enums'
 
 /**
- * Application users. A user is an authentication principal — distinct from a Party (contact record).
+ * Application users. An authentication principal — distinct from a Party (contact record).
  * A user MAY be linked to a Party (e.g., Venkata is both User and Party); not required.
  *
- * The party_id and avatar_file_id FK constraints are declared in a follow-up SQL
- * migration to avoid an import cycle between auth, parties, and files.
+ * Reconciled with Better Auth in P1-04: password lives on auth_accounts (credential
+ * provider), email_verified is a boolean (not a timestamp), TOTP secret lives on
+ * auth_two_factor. The party_id and avatar_file_id FK constraints are declared
+ * in a follow-up SQL migration to avoid an import cycle between auth, parties, and files.
  */
 export const users = pgTable(
   'users',
@@ -28,8 +29,7 @@ export const users = pgTable(
     id: id(),
     organizationId: organizationId(),
     email: text('email').notNull(),
-    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-    passwordHash: text('password_hash').notNull(),
+    emailVerified: boolean('email_verified').notNull().default(false),
     displayName: text('display_name').notNull(),
     avatarFileId: uuid('avatar_file_id'),
     partyId: uuid('party_id'),
@@ -46,7 +46,8 @@ export const users = pgTable(
 )
 
 /**
- * DB-backed sessions. Better Auth manages these in P1-04.
+ * DB-backed sessions managed by Better Auth.
+ * `token` stores the opaque session token (Better Auth signs it).
  */
 export const authSessions = pgTable(
   'auth_sessions',
@@ -55,39 +56,90 @@ export const authSessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    tokenHash: text('token_hash').notNull(),
+    token: text('token').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     ipAddress: inet('ip_address'),
     userAgent: text('user_agent'),
-    createdAt: timestamps.createdAt,
+    ...timestamps,
   },
   (t) => ({
-    tokenUnique: uniqueIndex('auth_sessions_token_unique').on(t.tokenHash),
+    tokenUnique: uniqueIndex('auth_sessions_token_unique').on(t.token),
     userIdx: index('auth_sessions_user_idx').on(t.userId),
   }),
 )
 
 /**
- * Encrypted OAuth tokens for Drive (Phase 1) and other providers (future).
- * access/refresh tokens are AES-256-GCM encrypted at the application layer.
+ * Unified accounts table (Better Auth model). One row per (user, provider).
+ * - provider_id 'credential' carries the email/password hash on `password_hash`
+ * - provider_id 'google' / 'microsoft' carry encrypted OAuth tokens
+ *
+ * Replaces the prior auth_oauth_tokens table.
  */
-export const authOauthTokens = pgTable(
-  'auth_oauth_tokens',
+export const authAccounts = pgTable(
+  'auth_accounts',
   {
     id: id(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    provider: oauthProviderEnum('provider').notNull(),
-    accessTokenEncrypted: text('access_token_encrypted').notNull(),
-    refreshTokenEncrypted: text('refresh_token_encrypted').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    scopes: text('scopes').array().notNull(),
-    accountEmail: text('account_email').notNull(),
+    providerId: text('provider_id').notNull(),
+    accountId: text('account_id').notNull(),
+    passwordHash: text('password_hash'),
+    accessTokenEncrypted: text('access_token_encrypted'),
+    refreshTokenEncrypted: text('refresh_token_encrypted'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+    scope: text('scope'),
+    accountEmail: text('account_email'),
     ...standardLifecycle,
   },
   (t) => ({
-    userProviderIdx: index('auth_oauth_user_provider_idx').on(t.userId, t.provider),
+    userProviderIdx: index('auth_accounts_user_provider_idx').on(t.userId, t.providerId),
+    providerAccountUnique: uniqueIndex('auth_accounts_provider_account_unique').on(
+      t.providerId,
+      t.accountId,
+    ),
+  }),
+)
+
+/**
+ * Verification tokens (Better Auth model).
+ * Used for email verification, password reset, etc. `identifier` is typically
+ * the email being verified; `value` is the token (or a hash of it).
+ */
+export const authVerifications = pgTable(
+  'auth_verifications',
+  {
+    id: id(),
+    identifier: text('identifier').notNull(),
+    value: text('value').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    identifierIdx: index('auth_verifications_identifier_idx').on(t.identifier),
+  }),
+)
+
+/**
+ * Per-user TOTP secret (Better Auth twoFactor plugin).
+ * Stored encrypted at the application layer; backup_codes is a JSON array of
+ * one-time recovery codes.
+ */
+export const authTwoFactor = pgTable(
+  'auth_two_factor',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    secretEncrypted: text('secret_encrypted').notNull(),
+    backupCodesEncrypted: text('backup_codes_encrypted'),
+    ...timestamps,
+  },
+  (t) => ({
+    userUnique: uniqueIndex('auth_two_factor_user_unique').on(t.userId),
   }),
 )
 
@@ -156,7 +208,10 @@ export const userPinnedActions = pgTable(
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type AuthSession = typeof authSessions.$inferSelect
-export type AuthOauthToken = typeof authOauthTokens.$inferSelect
+export type AuthAccount = typeof authAccounts.$inferSelect
+export type NewAuthAccount = typeof authAccounts.$inferInsert
+export type AuthVerification = typeof authVerifications.$inferSelect
+export type AuthTwoFactor = typeof authTwoFactor.$inferSelect
 export type Role = typeof roles.$inferSelect
 export type NewRole = typeof roles.$inferInsert
 export type UserRole = typeof userRoles.$inferSelect
