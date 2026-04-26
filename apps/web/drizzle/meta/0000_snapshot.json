@@ -1,0 +1,399 @@
+{
+  "id": "bd531505-ec60-41af-9898-6eaffa9e3db7",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {},
+  "enums": {
+    "public.account_type": {
+      "name": "account_type",
+      "schema": "public",
+      "values": [
+        "asset",
+        "liability",
+        "equity",
+        "revenue",
+        "expense",
+        "cogs"
+      ]
+    },
+    "public.address_kind": {
+      "name": "address_kind",
+      "schema": "public",
+      "values": [
+        "billing",
+        "shipping",
+        "home",
+        "office",
+        "other"
+      ]
+    },
+    "public.ai_run_status": {
+      "name": "ai_run_status",
+      "schema": "public",
+      "values": [
+        "success",
+        "error",
+        "rate_limited"
+      ]
+    },
+    "public.ai_suggestion_status": {
+      "name": "ai_suggestion_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "accepted",
+        "rejected",
+        "expired"
+      ]
+    },
+    "public.audit_action": {
+      "name": "audit_action",
+      "schema": "public",
+      "values": [
+        "insert",
+        "update",
+        "delete",
+        "soft_delete",
+        "restore"
+      ]
+    },
+    "public.billing_period": {
+      "name": "billing_period",
+      "schema": "public",
+      "values": [
+        "monthly",
+        "quarterly",
+        "annual",
+        "lifetime"
+      ]
+    },
+    "public.business_line_kind": {
+      "name": "business_line_kind",
+      "schema": "public",
+      "values": [
+        "services",
+        "subscription",
+        "ad_revenue",
+        "product",
+        "other"
+      ]
+    },
+    "public.card_ownership": {
+      "name": "card_ownership",
+      "schema": "public",
+      "values": [
+        "business_owned",
+        "personal_with_business_use"
+      ]
+    },
+    "public.card_type": {
+      "name": "card_type",
+      "schema": "public",
+      "values": [
+        "visa",
+        "mastercard",
+        "amex",
+        "discover",
+        "other"
+      ]
+    },
+    "public.contract_status": {
+      "name": "contract_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "sent",
+        "signed",
+        "active",
+        "expired",
+        "renewed",
+        "terminated"
+      ]
+    },
+    "public.custom_field_type": {
+      "name": "custom_field_type",
+      "schema": "public",
+      "values": [
+        "text",
+        "number",
+        "date",
+        "boolean",
+        "select",
+        "multiselect"
+      ]
+    },
+    "public.deal_stage_kind": {
+      "name": "deal_stage_kind",
+      "schema": "public",
+      "values": [
+        "open",
+        "won",
+        "lost"
+      ]
+    },
+    "public.employee_classification": {
+      "name": "employee_classification",
+      "schema": "public",
+      "values": [
+        "w2",
+        "1099_contractor",
+        "owner_employee"
+      ]
+    },
+    "public.employee_status": {
+      "name": "employee_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "on_leave",
+        "terminated"
+      ]
+    },
+    "public.expense_report_status": {
+      "name": "expense_report_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "reimbursed"
+      ]
+    },
+    "public.file_kind": {
+      "name": "file_kind",
+      "schema": "public",
+      "values": [
+        "r2_owned",
+        "drive_linked"
+      ]
+    },
+    "public.filing_status": {
+      "name": "filing_status",
+      "schema": "public",
+      "values": [
+        "single",
+        "married_jointly",
+        "married_separately",
+        "head_of_household"
+      ]
+    },
+    "public.invoice_line_kind": {
+      "name": "invoice_line_kind",
+      "schema": "public",
+      "values": [
+        "time",
+        "expense",
+        "fixed",
+        "discount",
+        "tax"
+      ]
+    },
+    "public.invoice_status": {
+      "name": "invoice_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "sent",
+        "partially_paid",
+        "paid",
+        "overdue",
+        "void",
+        "canceled"
+      ]
+    },
+    "public.oauth_provider": {
+      "name": "oauth_provider",
+      "schema": "public",
+      "values": [
+        "google",
+        "microsoft"
+      ]
+    },
+    "public.party_kind": {
+      "name": "party_kind",
+      "schema": "public",
+      "values": [
+        "person",
+        "organization"
+      ]
+    },
+    "public.party_relationship_kind": {
+      "name": "party_relationship_kind",
+      "schema": "public",
+      "values": [
+        "works_at",
+        "spouse_of",
+        "manages",
+        "subsidiary_of",
+        "partner_of",
+        "other"
+      ]
+    },
+    "public.party_role": {
+      "name": "party_role",
+      "schema": "public",
+      "values": [
+        "vendor",
+        "end_client",
+        "customer",
+        "lead",
+        "partner",
+        "employee",
+        "contractor",
+        "supplier"
+      ]
+    },
+    "public.pay_frequency": {
+      "name": "pay_frequency",
+      "schema": "public",
+      "values": [
+        "weekly",
+        "biweekly",
+        "semi_monthly",
+        "monthly"
+      ]
+    },
+    "public.pay_rate_kind": {
+      "name": "pay_rate_kind",
+      "schema": "public",
+      "values": [
+        "hourly",
+        "salary"
+      ]
+    },
+    "public.payment_method": {
+      "name": "payment_method",
+      "schema": "public",
+      "values": [
+        "check",
+        "ach",
+        "wire",
+        "card",
+        "cash",
+        "other"
+      ]
+    },
+    "public.payment_source": {
+      "name": "payment_source",
+      "schema": "public",
+      "values": [
+        "business_card",
+        "personal_card_business_use",
+        "personal_cash",
+        "business_check",
+        "business_ach",
+        "vendor_paid"
+      ]
+    },
+    "public.payment_status": {
+      "name": "payment_status",
+      "schema": "public",
+      "values": [
+        "expected",
+        "received",
+        "failed",
+        "refunded"
+      ]
+    },
+    "public.project_status": {
+      "name": "project_status",
+      "schema": "public",
+      "values": [
+        "planned",
+        "active",
+        "on_hold",
+        "completed",
+        "canceled"
+      ]
+    },
+    "public.subscription_event_kind": {
+      "name": "subscription_event_kind",
+      "schema": "public",
+      "values": [
+        "created",
+        "trial_started",
+        "trial_ended",
+        "activated",
+        "renewed",
+        "upgraded",
+        "downgraded",
+        "paused",
+        "resumed",
+        "canceled",
+        "expired",
+        "reactivated",
+        "payment_failed",
+        "payment_succeeded"
+      ]
+    },
+    "public.subscription_status": {
+      "name": "subscription_status",
+      "schema": "public",
+      "values": [
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "expired",
+        "paused"
+      ]
+    },
+    "public.tax_kind": {
+      "name": "tax_kind",
+      "schema": "public",
+      "values": [
+        "federal_income",
+        "state_income",
+        "self_employment",
+        "fica_ss",
+        "fica_medicare",
+        "medicare_additional"
+      ]
+    },
+    "public.tile_kind": {
+      "name": "tile_kind",
+      "schema": "public",
+      "values": [
+        "kpi",
+        "line_chart",
+        "bar_chart",
+        "table",
+        "list",
+        "project_health"
+      ]
+    },
+    "public.time_entry_status": {
+      "name": "time_entry_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "submitted",
+        "approved",
+        "invoiced",
+        "rejected"
+      ]
+    },
+    "public.timesheet_status": {
+      "name": "timesheet_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "submitted",
+        "approved",
+        "rejected"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
