@@ -23,12 +23,18 @@ export async function seedOwnerUser(venkataPartyId: string): Promise<string> {
   if (existing) {
     ownerUserId = existing.id
   } else {
+    // Pass localhost headers so Better Auth's session-create has a valid
+    // ip_address for the inet column (empty string → Postgres `network_in` error).
     const result = await auth.api.signUpEmail({
       body: {
         email: env.OWNER_EMAIL,
         password: env.OWNER_PASSWORD,
         name: 'Venkata Sundaragiri',
       },
+      headers: new Headers({
+        'x-forwarded-for': '127.0.0.1',
+        'user-agent': 'CXAllies/seed',
+      }),
       asResponse: false,
     })
 

@@ -4,6 +4,11 @@ import { seedBusinessLines } from './03-business-lines'
 import { seedRoles } from './04-roles'
 import { seedParties } from './05-parties'
 import { seedOwnerUser } from './06-users'
+import { seedChartOfAccountsTemplates } from './07-coa-templates'
+import { seedChartOfAccounts } from './08-chart-of-accounts'
+import { seedCurrencies } from './09-currencies'
+import { seedTimezones } from './10-timezones'
+import { seedTaxRates } from './11-tax-rates'
 
 async function main() {
   console.log('Seeding...')
@@ -24,6 +29,21 @@ async function main() {
 
   const ownerUserId = await seedOwnerUser(venkataPartyId)
   console.log(`  ✓ owner user     (user id ${ownerUserId})`)
+
+  await seedChartOfAccountsTemplates()
+  console.log('  ✓ coa templates  (multi-line-operator, 26 lines)')
+
+  await seedChartOfAccounts(organizationId)
+  // log line printed inside seedChartOfAccounts
+
+  await seedCurrencies()
+  console.log('  ✓ currencies     (44 ISO 4217 majors)')
+
+  await seedTimezones()
+  console.log('  ✓ timezones      (full IANA via Intl.supportedValuesOf)')
+
+  await seedTaxRates()
+  console.log('  ✓ tax_rates      (21 rows, 2026)')
 
   console.log('Done.')
 }

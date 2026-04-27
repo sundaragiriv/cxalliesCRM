@@ -308,6 +308,40 @@ Seed is idempotent — running twice produces the same DB state.
 
 **Seeded data is data, not code.** Never hardcode a UUID of a seeded row as a constant in application code. Resolve at runtime via stable lookup key (slug for brands and business lines; `LIMIT 1` for the singleton organization; session context for the user's org once multi-tenant). The product will be sold to other tenants, and a hardcoded `00000000-…-001` baked into a query is a multi-tenant migration time bomb.
 
+### 3.11 Customer data vs reference data
+
+CXAllies is a Unified SMB Platform. Every architectural decision assumes "this will be sold to other SMBs as a SaaS product." The single-tenant deployment for Varahi is just the first customer.
+
+**Test for every commit:** "If I gave this codebase to a different SMB tomorrow, what would they need to change in CODE?"
+- Acceptable: "Nothing — they edit data through the UI."
+- Unacceptable: "Change line X of file Y."
+
+Three categories of data, with hard rules for each:
+
+| Category | Example | Where it lives |
+|---|---|---|
+| **Tenant data** — customer-owned, customer-edited | Chart of Accounts, deal stages, tags, custom fields | Per-org rows. Sensible defaults ship as **system-managed templates** that materialize into editable tenant data on org creation. |
+| **Reference data** — jurisdictional or universal | Tax brackets, currencies (ISO 4217), timezones (IANA TZ database), country codes | System-shipped tables with **no `organization_id`**. Shared across tenants. Updated globally. |
+| **Enums** — code actually branches on the value | `account_type` (drives debit/credit math), `business_line_kind` (drives reporting templates) | Postgres `pgEnum`. Touching these requires a schema migration. |
+
+**The line between data and enum:** if there's actual code branching on the value (e.g., `account_type` drives debit/credit math), enum is correct. If it's just a label or category, it's data.
+
+**Do not hardcode:**
+- Business taxonomy (lines, brands, accounts, categories, stages, statuses)
+- Vocabulary (role display names, permission descriptions, KPI labels)
+- Reference data (currencies, timezones, tax rates, countries)
+- Workflows (deal pipelines, approval flows, default tile sets)
+
+**The canonical pattern** for "ship sensible defaults that any tenant can customize":
+1. Define a `*_templates` table (system-managed, no `organization_id`).
+2. Define a `*_template_lines` table (the contents of each template).
+3. Seed both with reference data shipped with the product.
+4. Provide an `apply{Thing}Template(organizationId, templateSlug)` function in the owning module's `lib/` that materializes a template into editable per-org rows.
+5. New tenants pick a template at onboarding (or accept the default).
+6. Tenants edit, add, or remove rows freely after that.
+
+Phase 1 lands this pattern for the Chart of Accounts (P1-06). Future tickets apply the same pattern to **deal stages** (P1-14), **dashboard tiles** (P1-22), and **role permissions overrides** (Phase 2). Don't refactor existing rigid spots ahead of those tickets — just don't bake more rigidity in.
+
 ---
 
 ## 4. API layer

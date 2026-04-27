@@ -27,6 +27,7 @@ export async function seedOrganizations(): Promise<string> {
       homeState: 'NC',
       defaultCurrency: 'USD',
       defaultTimezone: 'America/New_York',
+      defaultFilingStatus: 'married_jointly',
     })
     .returning({ id: organizations.id })
 

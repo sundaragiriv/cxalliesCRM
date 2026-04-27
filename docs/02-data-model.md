@@ -242,6 +242,7 @@ The Varahi Group singleton. Every other table FKs into this for multi-tenant rea
 | `home_state` | `char(2) NOT NULL DEFAULT 'NC'` | |
 | `default_currency` | `char(3) NOT NULL DEFAULT 'USD'` | |
 | `default_timezone` | `text NOT NULL DEFAULT 'America/New_York'` | |
+| `default_filing_status` | `enum filing_status NULL` | Owner's tax-filing status; consumed by tax estimate calculations. Per-org config because tax brackets are filing-status-specific. |
 | `address_line_1`, `address_line_2`, `city`, `state`, `postal_code`, `country` | `text` | Legal mailing address |
 | `phone`, `email`, `website` | `text NULL` | Contact info |
 | `logo_file_id` | `uuid NULL FK → files.id` | |
@@ -1176,12 +1177,15 @@ What ships in the database before the first user signs in:
 
 | Seed data | Source | Purpose |
 |---|---|---|
-| One `organizations` row | Hard-coded migration | Varahi Group LLC |
-| Four `business_lines` rows | Migration | SAP Consulting, Pravara.ai, Websites, YouTube — configurable, can be edited |
-| One `brands` row | Migration | CXAllies |
-| Five `roles` rows | Migration | Owner, Admin, Bookkeeper, Sales, Support Agent |
-| 26-row `chart_of_accounts` | Migration | Standard small-business CoA + per-line revenue/expense splits |
-| Federal + NC `tax_rates` (2026) | Migration | IRS Pub 15-T tables, NC tables. Owner can update yearly. |
+| One `organizations` row | `db:seed` (`01-organizations.ts`) | Varahi Group LLC |
+| Four `business_lines` rows | `db:seed` (`03-business-lines.ts`) | SAP Consulting, Pravara.ai, Websites, YouTube — configurable, can be edited |
+| Four `brands` rows | `db:seed` (`02-brands.ts`) | Varahi Systems, Pravara.ai, CXAllies, Moonking Studios |
+| Five `roles` rows | `db:seed` (`04-roles.ts`) | Owner, Admin, Bookkeeper, Sales, Support Agent |
+| One `chart_of_accounts_templates` row + 26 `chart_of_accounts_template_lines` (`multi-line-operator`) | `db:seed` (`07-coa-templates.ts`) | System-managed reference template per conventions §3.11. Tenants pick a template at onboarding. |
+| 26 per-tenant `chart_of_accounts` rows | `db:seed` (`08-chart-of-accounts.ts`) materialized via `applyChartOfAccountsTemplate(orgId, 'multi-line-operator')` | Editable tenant data; revenue accounts auto-linked to business_lines via slug match. |
+| ~44 ISO 4217 `currencies` rows | `db:seed` (`09-currencies.ts`) | Reference data — system-shipped, shared across tenants. |
+| Full IANA `timezones` (~418 rows) | `db:seed` (`10-timezones.ts`) | Reference data via `Intl.supportedValuesOf('timeZone')`. |
+| 21 `tax_rates` rows (federal + FICA + Medicare + SE + NC, 2026) | `db:seed` (`11-tax-rates.ts`) | Reference data; no `organization_id`. 2025 IRS brackets used as 2026 placeholder (update when IRS publishes finals). |
 | Default `deal_stages` per Business Line | Migration | Lead → Qualified → Proposal → Negotiation → Won/Lost |
 | One `users` row (Venkata as Owner) | Migration | Owner account, password set on first run |
 | One `parties` row for Venkata, linked to user | Migration | |
@@ -1826,6 +1830,7 @@ import {
   businessLineKindEnum,
   addressKindEnum,
   customFieldTypeEnum,
+  filingStatusEnum,
 } from '@/db/enums';
 import { users } from '@/modules/auth/schema';
 
@@ -1845,6 +1850,7 @@ export const organizations = pgTable('organizations', {
   defaultTimezone: text('default_timezone')
     .notNull()
     .default('America/New_York'),
+  defaultFilingStatus: filingStatusEnum('default_filing_status'),
   addressLine1: text('address_line_1'),
   addressLine2: text('address_line_2'),
   city: text('city'),
@@ -2172,6 +2178,8 @@ export type NewFileRecord = typeof files.$inferInsert;
 ---
 
 ## 6. `finance` module — `src/modules/finance/schema.ts`
+
+> **P1-06 patches:** `tax_rates` is now jurisdictional reference data (no `organization_id`); added `chart_of_accounts_templates` + `chart_of_accounts_template_lines` (system-shipped CoA starter templates per conventions §3.11) and `currencies` + `timezones` (reference data); timestamp columns previously typed as `text` (`revenue_entries.received_at`, `expense_reports.submitted_at/approved_at/reimbursed_at`, `tax_estimates.paid_at`) are now `timestamp({ withTimezone: true })` (corrects an earlier doc error). The Drizzle source in `apps/web/src/modules/finance/schema.ts` is canonical; this section will be re-synced as the schema evolves.
 
 ```typescript
 // src/modules/finance/schema.ts

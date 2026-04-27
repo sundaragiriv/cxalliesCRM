@@ -20,6 +20,7 @@ import {
   businessLineKindEnum,
   addressKindEnum,
   customFieldTypeEnum,
+  filingStatusEnum,
 } from '@/db/enums'
 import { users } from '@/modules/auth/schema'
 
@@ -39,6 +40,7 @@ export const organizations = pgTable('organizations', {
   homeState: char('home_state', { length: 2 }).notNull().default('NC'),
   defaultCurrency: char('default_currency', { length: 3 }).notNull().default('USD'),
   defaultTimezone: text('default_timezone').notNull().default('America/New_York'),
+  defaultFilingStatus: filingStatusEnum('default_filing_status'),
   addressLine1: text('address_line_1'),
   addressLine2: text('address_line_2'),
   city: text('city'),
