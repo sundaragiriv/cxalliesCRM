@@ -19,30 +19,34 @@ export async function seedOwnerUser(venkataPartyId: string): Promise<string> {
     .where(eq(users.email, env.OWNER_EMAIL))
     .limit(1)
 
+  let ownerUserId: string
   if (existing) {
-    return existing.id
+    ownerUserId = existing.id
+  } else {
+    const result = await auth.api.signUpEmail({
+      body: {
+        email: env.OWNER_EMAIL,
+        password: env.OWNER_PASSWORD,
+        name: 'Venkata Sundaragiri',
+      },
+      asResponse: false,
+    })
+
+    const ownerUser = (result as { user?: { id: string } } | null)?.user
+    if (!ownerUser) {
+      throw new Error('Better Auth signUpEmail did not return a user.')
+    }
+    ownerUserId = ownerUser.id
   }
 
-  const result = await auth.api.signUpEmail({
-    body: {
-      email: env.OWNER_EMAIL,
-      password: env.OWNER_PASSWORD,
-      name: 'Venkata Sundaragiri',
-    },
-    asResponse: false,
-  })
-
-  const ownerUser = (result as { user?: { id: string } } | null)?.user
-  if (!ownerUser) {
-    throw new Error('Better Auth signUpEmail did not return a user.')
-  }
-
-  await db.update(users).set({ partyId: venkataPartyId }).where(eq(users.id, ownerUser.id))
+  // Run these on every seed call so a partially-created user is always
+  // brought to a fully-configured state (idempotent, like the prior seeds).
+  await db.update(users).set({ partyId: venkataPartyId }).where(eq(users.id, ownerUserId))
 
   await db
     .insert(userRoles)
-    .values({ userId: ownerUser.id, roleId: 'owner' })
+    .values({ userId: ownerUserId, roleId: 'owner' })
     .onConflictDoNothing({ target: [userRoles.userId, userRoles.roleId] })
 
-  return ownerUser.id
+  return ownerUserId
 }

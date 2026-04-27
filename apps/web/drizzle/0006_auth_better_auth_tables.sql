@@ -36,7 +36,7 @@ CREATE TABLE "auth_verifications" (
 --> statement-breakpoint
 ALTER TABLE "auth_oauth_tokens" DISABLE ROW LEVEL SECURITY;--> statement-breakpoint
 DROP TABLE "auth_oauth_tokens" CASCADE;--> statement-breakpoint
-ALTER TABLE "files" DROP CONSTRAINT "files_drive_account_id_auth_oauth_tokens_id_fk";
+ALTER TABLE "files" DROP CONSTRAINT IF EXISTS "files_drive_account_id_auth_oauth_tokens_id_fk";
 --> statement-breakpoint
 DROP INDEX "auth_sessions_token_unique";--> statement-breakpoint
 ALTER TABLE "auth_sessions" ADD COLUMN "token" text NOT NULL;--> statement-breakpoint

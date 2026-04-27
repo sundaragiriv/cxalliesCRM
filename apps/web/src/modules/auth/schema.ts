@@ -35,7 +35,7 @@ export const users = pgTable(
     partyId: uuid('party_id'),
     timezone: text('timezone').notNull().default('America/New_York'),
     locale: text('locale').notNull().default('en-US'),
-    has2faEnabled: boolean('has_2fa_enabled').notNull().default(false),
+    twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...standardLifecycle,
   },

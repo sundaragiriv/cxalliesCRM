@@ -17,14 +17,24 @@ export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
 
+  // Our schemas use uuid PKs (per data-model §1). Override Better Auth's default
+  // short-id generator to produce UUIDs that match the column type.
+  advanced: {
+    database: {
+      generateId: () => crypto.randomUUID(),
+    },
+  },
+
   database: drizzleAdapter(db, {
     provider: 'pg',
+    // Schema map keys match Better Auth's modelName overrides below
+    // (Drizzle adapter looks up tables by modelName when set).
     schema: {
-      user: users,
-      session: authSessions,
-      account: authAccounts,
-      verification: authVerifications,
-      twoFactor: authTwoFactor,
+      users,
+      authSessions,
+      authAccounts,
+      authVerifications,
+      authTwoFactor,
     },
   }),
 
@@ -34,11 +44,10 @@ export const auth = betterAuth({
       name: 'displayName',
     },
     additionalFields: {
-      organizationId: { type: 'string', required: true, input: false },
+      organizationId: { type: 'string', required: false, input: false },
       partyId: { type: 'string', required: false, input: false },
       timezone: { type: 'string', defaultValue: 'America/New_York', input: false },
       locale: { type: 'string', defaultValue: 'en-US', input: false },
-      has2faEnabled: { type: 'boolean', defaultValue: false, input: false },
       lastLoginAt: { type: 'date', required: false, input: false },
       avatarFileId: { type: 'string', required: false, input: false },
     },

@@ -57,6 +57,13 @@
       "when": 1777246888384,
       "tag": "0007_auth_better_auth_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777862400000,
+      "tag": "0008_rename_has_2fa_to_two_factor",
+      "breakpoints": true
     }
   ]
 }

@@ -49,6 +49,7 @@ export const PERMISSIONS_BY_ROLE: Record<RoleId, RoleAccess> = {
     MODULES.map((m) => [m, ['read', 'write', 'admin'] as ReadonlyArray<ModuleAction>]),
   ) as RoleAccess,
 
+  // Admin manages config and users; financial corrections require Bookkeeper.
   bookkeeper: {
     parties: ['read'],
     files: ['read', 'write'],
