@@ -44,18 +44,20 @@ describe('withAudit', () => {
     })
   })
 
-  it('writes an audit_log row with action, table, recordId, and actor', async () => {
+  it('writes an audit_log row and returns the inner handler result', async () => {
     const wrapped = withAudit('finance_expense_entries', 'insert', async () => ({
+      result: { id: 'expense-1', amountCents: 5000, description: 'lunch' },
       recordId: 'expense-1',
       after: { id: 'expense-1', amountCents: 5000 },
     }))
 
     const result = await wrapped({ note: 'lunch' })
 
-    expect(result).toEqual({ recordId: 'expense-1' })
+    // Returns the inner handler's `result` (composes with withPermission).
+    expect(result).toEqual({ id: 'expense-1', amountCents: 5000, description: 'lunch' })
+
     expect(insertMock).toHaveBeenCalledTimes(1)
     expect(insertValuesMock).toHaveBeenCalledTimes(1)
-
     const insertedRow = insertValuesMock.mock.calls[0]?.[0]
     expect(insertedRow).toMatchObject({
       organizationId: 'org-abc',
@@ -67,6 +69,25 @@ describe('withAudit', () => {
     })
   })
 
+  it('captures both before and after when the handler provides them', async () => {
+    const wrapped = withAudit('parties', 'update', async () => ({
+      result: { id: 'p-1', displayName: 'New' },
+      recordId: 'p-1',
+      before: { id: 'p-1', displayName: 'Old' },
+      after: { id: 'p-1', displayName: 'New' },
+    }))
+
+    await wrapped({})
+
+    const insertedRow = insertValuesMock.mock.calls[0]?.[0]
+    expect(insertedRow).toMatchObject({
+      action: 'update',
+      tableName: 'parties',
+      before: { id: 'p-1', displayName: 'Old' },
+      after: { id: 'p-1', displayName: 'New' },
+    })
+  })
+
   it('throws if no organizationId is on the session user', async () => {
     getSessionMock.mockResolvedValueOnce({
       user: { id: 'user-123' },
@@ -74,16 +95,15 @@ describe('withAudit', () => {
     })
 
     const wrapped = withAudit('parties', 'update', async () => ({
+      result: { id: 'p-1' },
       recordId: 'p-1',
-      before: { id: 'p-1', displayName: 'Old' },
-      after: { id: 'p-1', displayName: 'New' },
     }))
 
     await expect(wrapped({})).rejects.toThrow(/organization_id/)
   })
 
   it('passes the input to the wrapped function unchanged', async () => {
-    const inner = vi.fn(async () => ({ recordId: 'x' }))
+    const inner = vi.fn(async () => ({ result: { ok: true }, recordId: 'x' }))
     const wrapped = withAudit('parties', 'insert', inner)
     await wrapped({ kind: 'person', displayName: 'Test' })
     expect(inner).toHaveBeenCalledWith({ kind: 'person', displayName: 'Test' })

@@ -71,6 +71,17 @@ export default [
       'apps/web/src/lib/auth.ts',
       'apps/web/src/lib/auth/**/*.ts',
       'apps/web/src/lib/audit/**/*.ts',
+      // Module API files cross-import other modules' schemas to satisfy
+      // tRPC's read joins (e.g., finance.expenses.list joins parties for the
+      // payee name). The cross-module rule still blocks api → another
+      // module's actions/components/lib.
+      'apps/web/src/modules/*/api/**/*.ts',
+      'apps/web/src/modules/*/actions/**/*.ts',
+      // App routes are the integration layer per architecture §2.2 — pages,
+      // layouts, error/loading boundaries render the module's components and
+      // call its actions. Cross-module access from inside a module still goes
+      // through api/actions.
+      'apps/web/src/app/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': 'off',

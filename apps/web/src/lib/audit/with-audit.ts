@@ -5,35 +5,39 @@ import { auditLog } from '@/db/shared-tables'
 
 export type AuditAction = 'insert' | 'update' | 'delete' | 'soft_delete' | 'restore'
 
-export type AuditContext = {
-  /** Optional snapshot of the row before mutation (for update/delete). */
-  before?: Record<string, unknown>
-  /** Snapshot of the row after mutation. */
-  after?: Record<string, unknown>
-  /** The record's id; recorded in audit_log.record_id. */
+/**
+ * Shape returned by an audited handler:
+ *  - `result`: the value returned to the caller (forwarded by withAudit)
+ *  - `recordId`: written to audit_log.record_id
+ *  - `before` / `after`: snapshots written to audit_log.before / after
+ */
+export type AuditedHandlerOutput<TResult> = {
+  result: TResult
   recordId: string
+  before?: Record<string, unknown>
+  after?: Record<string, unknown>
 }
 
 /**
  * Audit middleware HOF for Server Actions per conventions §4.8.
  *
- * The wrapped function returns an AuditContext describing what changed; this HOF
- * writes the audit_log row from that context plus the calling user/session info.
+ * Composes with withPermission cleanly:
  *
- *   export const createExpense = withAudit(
- *     'finance_expense_entries',
- *     'insert',
- *     async (input: CreateExpenseInput) => {
- *       const expense = await db.insert(...).returning(...)[0];
- *       return { recordId: expense.id, after: expense };
- *     }
- *   );
+ *   export const createExpense = withPermission('finance', 'write',
+ *     withAudit('finance_expense_entries', 'insert', async (input) => {
+ *       const [row] = await db.insert(expenseEntries).values({...}).returning()
+ *       return { result: row, recordId: row.id, after: row }
+ *     })
+ *   )
+ *
+ * withAudit returns just `result` to the caller; withPermission wraps that in
+ * ActionResult<typeof result>.
  */
-export function withAudit<TInput>(
+export function withAudit<TInput, TResult>(
   tableName: string,
   action: AuditAction,
-  fn: (input: TInput) => Promise<AuditContext>,
-): (input: TInput) => Promise<{ recordId: string }> {
+  fn: (input: TInput) => Promise<AuditedHandlerOutput<TResult>>,
+): (input: TInput) => Promise<TResult> {
   return async (input: TInput) => {
     const reqHeaders = await headers()
     const session = await auth.api.getSession({ headers: reqHeaders })
@@ -57,6 +61,6 @@ export function withAudit<TInput>(
       userAgent: reqHeaders.get('user-agent') ?? null,
     })
 
-    return { recordId: ctx.recordId }
+    return ctx.result
   }
 }

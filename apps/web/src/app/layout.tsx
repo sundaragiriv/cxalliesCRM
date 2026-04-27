@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/components/providers/ThemeProvider'
+import { TrpcProvider } from '@/components/providers/TrpcProvider'
 import './globals.css'
 
 const inter = Inter({
@@ -24,7 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
+          <TrpcProvider>{children}</TrpcProvider>
+          <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
     </html>

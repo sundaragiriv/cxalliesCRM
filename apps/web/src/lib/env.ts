@@ -15,6 +15,13 @@ const schema = z.object({
   OWNER_PASSWORD: z
     .string()
     .min(12, 'OWNER_PASSWORD must be at least 12 characters'),
+
+  // R2 / S3-compatible object storage (MinIO locally, Cloudflare R2 in prod)
+  R2_ENDPOINT: z.string().url(),
+  R2_REGION: z.string().default('auto'),
+  R2_ACCESS_KEY_ID: z.string().min(1),
+  R2_SECRET_ACCESS_KEY: z.string().min(1),
+  R2_BUCKET: z.string().min(1),
 })
 
 const parsed = schema.safeParse(process.env)

@@ -19,5 +19,40 @@ services:
       timeout: 5s
       retries: 10
 
+  # MinIO — S3-compatible object storage for local R2 emulation per ADR-0004.
+  # Production reads the same R2_* env vars but points at Cloudflare R2.
+  minio:
+    image: minio/minio:latest
+    container_name: cxallies-minio
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: cxallies
+      MINIO_ROOT_PASSWORD: cxallies_dev_minio
+    # 9000 = S3 API, 9001 = web console (browse files manually).
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - cxallies-minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot init container: creates the cxallies-dev bucket if missing.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 cxallies cxallies_dev_minio;
+      mc mb -p local/cxallies-dev || true;
+      "
+
 volumes:
   cxallies-db-data:
+  cxallies-minio-data:

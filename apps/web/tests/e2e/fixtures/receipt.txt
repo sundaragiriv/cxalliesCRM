@@ -1,0 +1,7 @@
+Test receipt fixture for Playwright. The mobile expense flow attaches this
+file via FilePicker; upload-to-r2 stores the bytes in MinIO; the detail page
+fetches a presigned URL via tRPC and renders.
+
+The file is plain text uploaded as application/pdf in the test (the size and
+bytes don't matter for the integration assertion — we only verify the upload
++ URL round-trip works end-to-end).
