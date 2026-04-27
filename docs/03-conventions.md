@@ -342,6 +342,24 @@ Three categories of data, with hard rules for each:
 
 Phase 1 lands this pattern for the Chart of Accounts (P1-06). Future tickets apply the same pattern to **deal stages** (P1-14), **dashboard tiles** (P1-22), and **role permissions overrides** (Phase 2). Don't refactor existing rigid spots ahead of those tickets — just don't bake more rigidity in.
 
+### 3.12 Sequential numbering convention
+
+All user-facing sequential numbers use a **4-digit zero-padded suffix** with the form `{PREFIX}-{YYYY}-{NNNN}`. Phase 1 prefixes:
+
+| Prefix | Entity | Ticket |
+|---|---|---|
+| `JE-YYYY-NNNN` | Journal entries | P1-08 |
+| `EXP-YYYY-NNNN` | Expense reports | P1-09 |
+| `INV-YYYY-NNNN` | Invoices | P1-13 |
+| `PAY-YYYY-NNNN` | Payments | P1-13 |
+| `PR-YYYY-NNNN` | Payroll runs | P1-19 |
+
+`9999` entries per prefix per year is enough headroom for any SMB. Extend to 5 digits per-prefix only when a tenant proves the need.
+
+**Implementation:** each prefix gets a small `nextXxxNumber(tx, organizationId, year)` helper inside its module's `lib/` directory. The helper uses `MAX(number) + 1` inside the caller's transaction. This carries a theoretical race window in concurrent contention; single-user Phase 1 makes it moot. Phase 2 multi-user upgrade is a `*_counters` table with `INSERT ... ON CONFLICT DO UPDATE SET seq = seq + 1 RETURNING seq`, or retry-on-unique-violation.
+
+**Unique index** on `(organization_id, number)` for every numbered table — guarantees no duplicates if the race ever fires.
+
 ---
 
 ## 4. API layer

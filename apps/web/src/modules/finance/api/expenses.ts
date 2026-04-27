@@ -64,6 +64,7 @@ export const expensesRouter = router({
           currencyCode: expenseEntries.currencyCode,
           isBillable: expenseEntries.isBillable,
           isReimbursable: expenseEntries.isReimbursable,
+          expenseReportId: expenseEntries.expenseReportId,
           businessLineId: expenseEntries.businessLineId,
           businessLineSlug: businessLines.slug,
           businessLineName: businessLines.name,

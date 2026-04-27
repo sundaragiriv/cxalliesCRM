@@ -17,10 +17,16 @@ import type { FinanceTx } from '@/lib/audit/with-audit'
  * materialization). For existing orgs, ship a backfill migration that sets
  * system_role on the appropriate row.
  *
- * Phase 1: cash + AR. P1-09 + P1-13 + P1-19 will extend (expense_clearing,
- * payment_processor_holding, retained_earnings, ...).
+ * Phase 1: cash + AR + employee reimbursement payable. P1-13 + P1-19 will
+ * extend (payroll_payable, withholding_tax_payable, vendor_advance,
+ * payment_processor_holding, retained_earnings, ...). Specific role names
+ * always — never a generic "clearing".
  */
-export const SYSTEM_ROLES = ['cash_operating', 'ar_default'] as const
+export const SYSTEM_ROLES = [
+  'cash_operating',
+  'ar_default',
+  'employee_payable',
+] as const
 export type SystemRole = (typeof SYSTEM_ROLES)[number]
 
 export class MissingSystemAccountError extends Error {

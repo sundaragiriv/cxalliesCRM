@@ -504,7 +504,7 @@ Per the kickoff scope addition. Groups employee expenses for reimbursement.
 | Column | Type | Notes |
 |---|---|---|
 | `id`, `organization_id`, `created_at`, `updated_at`, `deleted_at` | | |
-| `report_number` | `text NOT NULL` | "EXP-2026-001" |
+| `report_number` | `text NOT NULL` | "EXP-2026-0001" (4-digit padding per conventions §3.12) |
 | `submitted_by_user_id` | `uuid NOT NULL FK → users.id` | |
 | `subject_party_id` | `uuid NULL FK → parties.id` | The Employee Party |
 | `business_line_id` | `uuid NULL FK → business_lines.id` | |

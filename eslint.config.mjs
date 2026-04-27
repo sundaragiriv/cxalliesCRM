@@ -82,6 +82,10 @@ export default [
       // call its actions. Cross-module access from inside a module still goes
       // through api/actions.
       'apps/web/src/app/**/*.{ts,tsx}',
+      // Tests legitimately import internal module helpers (lib/, schema)
+      // to verify them in isolation. Application code is still bound by
+      // the rule.
+      'apps/web/tests/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': 'off',

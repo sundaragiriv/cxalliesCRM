@@ -40,6 +40,7 @@ const MULTI_LINE_OPERATOR_LINES: ReadonlyArray<TemplateLineSeed> = [
   { accountNumber: '2200', accountName: 'Federal Income Tax Payable', accountType: 'liability', accountSubtype: 'current_liability' },
   { accountNumber: '2210', accountName: 'NC State Income Tax Payable', accountType: 'liability', accountSubtype: 'current_liability' },
   { accountNumber: '2220', accountName: 'Self-Employment Tax Payable', accountType: 'liability', accountSubtype: 'current_liability' },
+  { accountNumber: '2300', accountName: 'Employee Reimbursements Payable', accountType: 'liability', accountSubtype: 'current_liability', systemRole: 'employee_payable' },
 
   // 3xxx Equity
   { accountNumber: '3000', accountName: "Owner's Equity", accountType: 'equity', accountSubtype: 'equity' },

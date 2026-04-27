@@ -1,5 +1,11 @@
 import Link from 'next/link'
-import { ReceiptText, FileText, BarChart3 } from 'lucide-react'
+import {
+  ReceiptText,
+  FileText,
+  BarChart3,
+  FileSpreadsheet,
+  CreditCard,
+} from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function FinanceLandingPage() {
@@ -42,6 +48,41 @@ export default function FinanceLandingPage() {
             <CardContent>
               <span className="text-sm font-medium text-primary group-hover:underline">
                 Open revenue →
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/finance/expense-reports" className="group">
+          <Card className="h-full transition-shadow hover:shadow-md">
+            <CardHeader>
+              <FileSpreadsheet className="h-6 w-6 text-primary" />
+              <CardTitle className="mt-2">Expense reports</CardTitle>
+              <CardDescription>
+                Group reimbursable expenses for approval and payout. Approval posts the journal,
+                reimbursement settles cash.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <span className="text-sm font-medium text-primary group-hover:underline">
+                Open reports →
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/finance/cards" className="group">
+          <Card className="h-full transition-shadow hover:shadow-md">
+            <CardHeader>
+              <CreditCard className="h-6 w-6 text-primary" />
+              <CardTitle className="mt-2">Corporate cards</CardTitle>
+              <CardDescription>
+                Track which cards are business-owned vs. personal-with-business-use.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <span className="text-sm font-medium text-primary group-hover:underline">
+                Manage cards →
               </span>
             </CardContent>
           </Card>

@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus, ReceiptText } from 'lucide-react'
-import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Plus, ReceiptText, FileSpreadsheet } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import {
@@ -20,7 +22,10 @@ import { formatMoney } from '../lib/format-money'
 import { ExpenseFilters, type ExpenseFilterState } from './ExpenseFilters'
 
 export function ExpenseList() {
+  const router = useRouter()
   const [filters, setFilters] = useState<ExpenseFilterState>({})
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const query = trpc.finance.expenses.list.useInfiniteQuery(
     {
@@ -37,7 +42,33 @@ export function ExpenseList() {
     },
   )
 
-  const items = query.data?.pages.flatMap((p) => p.items) ?? []
+  const items = useMemo(
+    () => query.data?.pages.flatMap((p) => p.items) ?? [],
+    [query.data],
+  )
+
+  const eligibleSelected = useMemo(
+    () =>
+      items.filter(
+        (i) => selected.has(i.id) && i.isReimbursable && !i.expenseReportId,
+      ),
+    [items, selected],
+  )
+
+  function toggle(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function startReportFromSelection() {
+    if (eligibleSelected.length === 0) return
+    const ids = eligibleSelected.map((i) => i.id).join(',')
+    router.push(`/finance/expense-reports/new?expenseIds=${ids}`)
+  }
 
   return (
     <div className="space-y-6">
@@ -48,13 +79,44 @@ export function ExpenseList() {
             Record and search every business expense.
           </p>
         </div>
-        <Button asChild size="lg">
-          <Link href="/finance/expenses/new">
-            <Plus className="mr-2 h-5 w-5" />
-            New expense
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant={selectionMode ? 'default' : 'outline'}
+            onClick={() => {
+              setSelectionMode((s) => !s)
+              if (selectionMode) setSelected(new Set())
+            }}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            {selectionMode ? 'Done' : 'Create report'}
+          </Button>
+          <Button asChild size="lg">
+            <Link href="/finance/expenses/new">
+              <Plus className="mr-2 h-5 w-5" />
+              New expense
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      {selectionMode && (
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-4 py-2">
+          <p className="text-sm">
+            {eligibleSelected.length === 0
+              ? 'Select reimbursable expenses (not already on a report) to group them.'
+              : `${eligibleSelected.length} eligible selected · ${formatMoney(
+                  eligibleSelected.reduce((sum, e) => sum + e.amountCents, 0),
+                )}`}
+          </p>
+          <Button
+            size="sm"
+            disabled={eligibleSelected.length === 0}
+            onClick={startReportFromSelection}
+          >
+            Create report
+          </Button>
+        </div>
+      )}
 
       <ExpenseFilters value={filters} onChange={setFilters} />
 
@@ -85,6 +147,7 @@ export function ExpenseList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {selectionMode && <TableHead className="w-10" />}
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Category</TableHead>
@@ -94,35 +157,53 @@ export function ExpenseList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((row) => (
-                  <TableRow key={row.id} className="cursor-pointer">
-                    <TableCell className="font-mono text-xs">{row.entryDate}</TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/finance/expenses/${row.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {row.description}
-                      </Link>
-                      {row.payeeDisplayName && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          → {row.payeeDisplayName}
-                        </span>
+                {items.map((row) => {
+                  const eligible = row.isReimbursable && !row.expenseReportId
+                  return (
+                    <TableRow key={row.id} className="cursor-pointer">
+                      {selectionMode && (
+                        <TableCell>
+                          <Checkbox
+                            disabled={!eligible}
+                            checked={selected.has(row.id)}
+                            onCheckedChange={(c) => toggle(row.id, c === true)}
+                            aria-label={
+                              eligible
+                                ? 'Select expense'
+                                : 'Not eligible for new report'
+                            }
+                          />
+                        </TableCell>
                       )}
-                    </TableCell>
-                    <TableCell className="text-sm">{row.accountName}</TableCell>
-                    <TableCell className="text-sm">{row.businessLineName}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatMoney(row.amountCents, row.currencyCode)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {row.isBillable && <Badge variant="outline">Billable</Badge>}
-                        {row.isReimbursable && <Badge variant="outline">Reimburse</Badge>}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      <TableCell className="font-mono text-xs">{row.entryDate}</TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/finance/expenses/${row.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {row.description}
+                        </Link>
+                        {row.payeeDisplayName && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            → {row.payeeDisplayName}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">{row.accountName}</TableCell>
+                      <TableCell className="text-sm">{row.businessLineName}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {formatMoney(row.amountCents, row.currencyCode)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {row.isBillable && <Badge variant="outline">Billable</Badge>}
+                          {row.isReimbursable && <Badge variant="outline">Reimburse</Badge>}
+                          {row.expenseReportId && <Badge variant="secondary">On report</Badge>}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

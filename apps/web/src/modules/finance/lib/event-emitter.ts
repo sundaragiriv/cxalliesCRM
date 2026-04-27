@@ -18,6 +18,17 @@ export type FinanceEventKind =
   | 'finance.revenue.created'
   | 'finance.revenue.updated'
   | 'finance.revenue.deleted'
+  | 'finance.expenseReport.created'
+  | 'finance.expenseReport.updated'
+  | 'finance.expenseReport.submitted'
+  | 'finance.expenseReport.approved'
+  | 'finance.expenseReport.rejected'
+  | 'finance.expenseReport.reopened'
+  | 'finance.expenseReport.reimbursed'
+  | 'finance.expenseReport.deleted'
+  | 'finance.corporateCard.created'
+  | 'finance.corporateCard.updated'
+  | 'finance.corporateCard.deleted'
 
 export interface FinanceEventPayload {
   organizationId: string

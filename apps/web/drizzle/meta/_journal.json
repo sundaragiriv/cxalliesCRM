@@ -92,6 +92,13 @@
       "when": 1777296870382,
       "tag": "0012_coa_system_role",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777948800000,
+      "tag": "0013_employee_payable_account",
+      "breakpoints": true
     }
   ]
 }
