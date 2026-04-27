@@ -93,6 +93,10 @@ export async function applyChartOfAccountsTemplate(
         accountSubtype: line.accountSubtype,
         businessLineId,
         description: line.description,
+        // Carry over the template's system_role tag so the new tenant has
+        // the same canonical accounts wired (cash, AR, etc.). Per
+        // conventions §3.11, tenants can re-tag in Settings later.
+        systemRole: line.systemRole ?? null,
       })
       .returning({ id: chartOfAccounts.id })
 

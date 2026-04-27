@@ -14,6 +14,8 @@ type TemplateLineSeed = {
   parentAccountNumber?: string
   description?: string
   suggestedBusinessLineMatch?: string
+  /** Carried over to chart_of_accounts.system_role at materialization. */
+  systemRole?: string
 }
 
 const MULTI_LINE_OPERATOR_TEMPLATE = {
@@ -26,9 +28,9 @@ const MULTI_LINE_OPERATOR_TEMPLATE = {
 
 const MULTI_LINE_OPERATOR_LINES: ReadonlyArray<TemplateLineSeed> = [
   // 1xxx Assets
-  { accountNumber: '1000', accountName: 'Cash – Operating', accountType: 'asset', accountSubtype: 'current_asset' },
+  { accountNumber: '1000', accountName: 'Cash – Operating', accountType: 'asset', accountSubtype: 'current_asset', systemRole: 'cash_operating' },
   { accountNumber: '1010', accountName: 'Cash – Savings', accountType: 'asset', accountSubtype: 'current_asset' },
-  { accountNumber: '1100', accountName: 'Accounts Receivable', accountType: 'asset', accountSubtype: 'current_asset' },
+  { accountNumber: '1100', accountName: 'Accounts Receivable', accountType: 'asset', accountSubtype: 'current_asset', systemRole: 'ar_default' },
   { accountNumber: '1200', accountName: 'Prepaid Expenses', accountType: 'asset', accountSubtype: 'current_asset' },
   { accountNumber: '1500', accountName: 'Computers & Equipment', accountType: 'asset', accountSubtype: 'fixed_asset' },
 
@@ -123,6 +125,7 @@ export async function seedChartOfAccountsTemplates(): Promise<void> {
         parentAccountNumber: line.parentAccountNumber ?? null,
         description: line.description ?? null,
         suggestedBusinessLineMatch: line.suggestedBusinessLineMatch ?? null,
+        systemRole: line.systemRole ?? null,
         displayOrder: idx,
       })),
     )

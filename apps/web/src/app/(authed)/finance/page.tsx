@@ -30,18 +30,22 @@ export default function FinanceLandingPage() {
           </Card>
         </Link>
 
-        <Card className="h-full opacity-60">
-          <CardHeader>
-            <FileText className="h-6 w-6 text-muted-foreground" />
-            <CardTitle className="mt-2">Revenue</CardTitle>
-            <CardDescription>
-              Records each recognized revenue event. Auto-generates journal entries.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <span className="text-sm text-muted-foreground">Ships in P1-08</span>
-          </CardContent>
-        </Card>
+        <Link href="/finance/revenue" className="group">
+          <Card className="h-full transition-shadow hover:shadow-md">
+            <CardHeader>
+              <FileText className="h-6 w-6 text-primary" />
+              <CardTitle className="mt-2">Revenue</CardTitle>
+              <CardDescription>
+                Record each recognized revenue event. Auto-generates journal entries.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <span className="text-sm font-medium text-primary group-hover:underline">
+                Open revenue →
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card className="h-full opacity-60">
           <CardHeader>

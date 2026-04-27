@@ -85,6 +85,13 @@
       "when": 1777258925257,
       "tag": "0011_finance_updated_at_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777296870382,
+      "tag": "0012_coa_system_role",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,75 @@ export const pickerOptionsRouter = router({
     },
   ),
 
+  /** Active revenue accounts from this org's CoA. */
+  revenueAccounts: procedureWithAuth({ module: 'finance', action: 'read' }).query(
+    async ({ ctx }) => {
+      const orgId = getOrgId(ctx)
+      const rows = await db
+        .select({
+          id: chartOfAccounts.id,
+          accountNumber: chartOfAccounts.accountNumber,
+          accountName: chartOfAccounts.accountName,
+          businessLineId: chartOfAccounts.businessLineId,
+        })
+        .from(chartOfAccounts)
+        .where(
+          and(
+            eq(chartOfAccounts.organizationId, orgId),
+            eq(chartOfAccounts.accountType, 'revenue'),
+            eq(chartOfAccounts.isActive, true),
+            active(chartOfAccounts),
+          ),
+        )
+        .orderBy(asc(chartOfAccounts.accountNumber))
+      return rows
+    },
+  ),
+
+  /**
+   * Party search for the revenue payer picker. Filters parties via
+   * party_roles where role IN ('end_client', 'customer', 'vendor') —
+   * vendor included for refund/contra cases per Q2 answer.
+   */
+  searchPayers: procedureWithAuth({ module: 'finance', action: 'read' })
+    .input(z.object({ query: z.string().trim().max(100).default(''), limit: z.number().int().min(1).max(20).default(10) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = getOrgId(ctx)
+      const pattern = `%${input.query}%`
+
+      const rows = await db
+        .selectDistinct({
+          id: parties.id,
+          displayName: parties.displayName,
+          kind: parties.kind,
+          primaryEmail: parties.primaryEmail,
+        })
+        .from(parties)
+        .innerJoin(partyRoles, eq(partyRoles.partyId, parties.id))
+        .where(
+          and(
+            eq(parties.organizationId, orgId),
+            active(parties),
+            eq(partyRoles.isActive, true),
+            or(
+              eq(partyRoles.role, 'end_client'),
+              eq(partyRoles.role, 'customer'),
+              eq(partyRoles.role, 'vendor'),
+            )!,
+            input.query
+              ? or(
+                  ilike(parties.displayName, pattern),
+                  ilike(parties.primaryEmail, pattern),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(asc(parties.displayName))
+        .limit(input.limit)
+
+      return rows
+    }),
+
   /** Active business lines for this org. */
   businessLines: procedureWithAuth({ module: 'finance', action: 'read' }).query(
     async ({ ctx }) => {

@@ -64,11 +64,26 @@ export const chartOfAccounts = pgTable(
     parentAccountId: uuid('parent_account_id'),
     isActive: boolean('is_active').notNull().default(true),
     description: text('description'),
+    /**
+     * System-account role tag per conventions §3.11. Templates pre-tag rows;
+     * tenants can re-tag in Settings (P1-25). Looked up at journal-post time
+     * via findSystemAccount(tx, orgId, role) — see lib/system-accounts.ts.
+     * Free-form text on the column; the closed list of role values lives in
+     * lib/system-accounts.ts as the SYSTEM_ROLES const.
+     */
+    systemRole: text('system_role'),
     ...standardLifecycle,
   },
   (t) => ({
     orgNumberUnique: uniqueIndex('coa_org_number_unique').on(t.organizationId, t.accountNumber),
     typeIdx: index('coa_type_idx').on(t.accountType, t.isActive),
+    /**
+     * Partial unique: at most one row per (org, role) carries any given role,
+     * but rows with NULL role are unconstrained.
+     */
+    orgSystemRoleUnique: uniqueIndex('coa_org_system_role_unique')
+      .on(t.organizationId, t.systemRole)
+      .where(sql`${t.systemRole} IS NOT NULL`),
   }),
 )
 
@@ -419,6 +434,8 @@ export const chartOfAccountsTemplateLines = pgTable(
     parentAccountNumber: text('parent_account_number'),
     description: text('description'),
     suggestedBusinessLineMatch: text('suggested_business_line_match'),
+    /** Carried over to chart_of_accounts.system_role at materialization. */
+    systemRole: text('system_role'),
     displayOrder: integer('display_order').notNull().default(0),
     ...standardLifecycle,
   },

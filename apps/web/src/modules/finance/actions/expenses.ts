@@ -1,9 +1,6 @@
 'use server'
 
 import { and, eq } from 'drizzle-orm'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
-import { db } from '@/db/client'
 import { expenseEntries } from '../schema'
 import { defineAction } from '@/lib/actions/define-action'
 import { active } from '@/lib/db/active'
@@ -15,25 +12,15 @@ import {
   softDeleteExpenseSchema,
 } from './expenses-schema'
 
-async function getOrgIdAndUser(): Promise<{ orgId: string; userId: string }> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Not signed in')
-  const orgId = (session.user as { organizationId?: string }).organizationId
-  if (!orgId) throw new Error('Missing organization context')
-  return { orgId, userId: session.user.id }
-}
-
 export const createExpense = defineAction({
   permission: { module: 'finance', action: 'write' },
   audit: { table: 'finance_expense_entries', action: 'insert' },
   schema: createExpenseSchema,
-  handler: async (input) => {
-    const { orgId, userId } = await getOrgIdAndUser()
-
-    const [row] = await db
+  handler: async (input, ctx) => {
+    const [row] = await ctx.tx
       .insert(expenseEntries)
       .values({
-        organizationId: orgId,
+        organizationId: ctx.organizationId,
         entryDate: input.entryDate,
         businessLineId: input.businessLineId,
         chartOfAccountsId: input.chartOfAccountsId,
@@ -48,15 +35,15 @@ export const createExpense = defineAction({
         projectId: input.projectId ?? null,
         receiptFileId: input.receiptFileId ?? null,
         notes: input.notes ?? null,
-        submittedByUserId: userId,
+        submittedByUserId: ctx.userId,
       })
       .returning()
 
     if (!row) throw new Error('Failed to insert expense')
 
-    await emitFinanceEvent('finance.expense.created', {
-      organizationId: orgId,
-      actorUserId: userId,
+    await emitFinanceEvent(ctx.tx, 'finance.expense.created', {
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.userId,
       partyId: input.payeePartyId ?? null,
       businessLineId: input.businessLineId,
       entityTable: 'finance_expense_entries',
@@ -78,18 +65,22 @@ export const updateExpense = defineAction({
   permission: { module: 'finance', action: 'write' },
   audit: { table: 'finance_expense_entries', action: 'update' },
   schema: updateExpenseSchema,
-  handler: async (input) => {
-    const { orgId, userId } = await getOrgIdAndUser()
-
-    const [before] = await db
+  handler: async (input, ctx) => {
+    const [before] = await ctx.tx
       .select()
       .from(expenseEntries)
-      .where(and(eq(expenseEntries.id, input.id), eq(expenseEntries.organizationId, orgId), active(expenseEntries)))
+      .where(
+        and(
+          eq(expenseEntries.id, input.id),
+          eq(expenseEntries.organizationId, ctx.organizationId),
+          active(expenseEntries),
+        ),
+      )
       .limit(1)
 
     if (!before) throw new Error('Expense not found')
 
-    const [row] = await db
+    const [row] = await ctx.tx
       .update(expenseEntries)
       .set({
         entryDate: input.entryDate,
@@ -107,14 +98,19 @@ export const updateExpense = defineAction({
         receiptFileId: input.receiptFileId ?? null,
         notes: input.notes ?? null,
       })
-      .where(and(eq(expenseEntries.id, input.id), eq(expenseEntries.organizationId, orgId)))
+      .where(
+        and(
+          eq(expenseEntries.id, input.id),
+          eq(expenseEntries.organizationId, ctx.organizationId),
+        ),
+      )
       .returning()
 
     if (!row) throw new Error('Failed to update expense')
 
-    await emitFinanceEvent('finance.expense.updated', {
-      organizationId: orgId,
-      actorUserId: userId,
+    await emitFinanceEvent(ctx.tx, 'finance.expense.updated', {
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.userId,
       partyId: input.payeePartyId ?? null,
       businessLineId: input.businessLineId,
       entityTable: 'finance_expense_entries',
@@ -135,28 +131,37 @@ export const softDeleteExpense = defineAction({
   permission: { module: 'finance', action: 'delete' },
   audit: { table: 'finance_expense_entries', action: 'soft_delete' },
   schema: softDeleteExpenseSchema,
-  handler: async (input) => {
-    const { orgId, userId } = await getOrgIdAndUser()
-
-    const [before] = await db
+  handler: async (input, ctx) => {
+    const [before] = await ctx.tx
       .select()
       .from(expenseEntries)
-      .where(and(eq(expenseEntries.id, input.id), eq(expenseEntries.organizationId, orgId), active(expenseEntries)))
+      .where(
+        and(
+          eq(expenseEntries.id, input.id),
+          eq(expenseEntries.organizationId, ctx.organizationId),
+          active(expenseEntries),
+        ),
+      )
       .limit(1)
 
     if (!before) throw new Error('Expense not found')
 
-    const [row] = await db
+    const [row] = await ctx.tx
       .update(expenseEntries)
       .set({ deletedAt: new Date() })
-      .where(and(eq(expenseEntries.id, input.id), eq(expenseEntries.organizationId, orgId)))
+      .where(
+        and(
+          eq(expenseEntries.id, input.id),
+          eq(expenseEntries.organizationId, ctx.organizationId),
+        ),
+      )
       .returning()
 
     if (!row) throw new Error('Failed to soft-delete expense')
 
-    await emitFinanceEvent('finance.expense.deleted', {
-      organizationId: orgId,
-      actorUserId: userId,
+    await emitFinanceEvent(ctx.tx, 'finance.expense.deleted', {
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.userId,
       partyId: before.payeePartyId,
       businessLineId: before.businessLineId,
       entityTable: 'finance_expense_entries',
