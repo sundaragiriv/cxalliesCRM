@@ -9,10 +9,10 @@ export * from '@/modules/parties/schema'
 export * from '@/modules/files/schema'
 
 export * from '@/modules/finance/schema'
+export * from '@/modules/billing/schema'
+export * from '@/modules/crm/schema'
 
 // Phase 1 modules added by their tickets:
-// export * from '@/modules/billing/schema';   // P1-09
-// export * from '@/modules/crm/schema';       // P1-15
 // export * from '@/modules/hr/schema';        // P1-13
 // export * from '@/modules/reporting/schema'; // P1-22
 // export * from '@/modules/ai/schema';        // P1-23

@@ -328,33 +328,38 @@ The 26 tickets group into **9 sections** mapping to the build sequence. Sections
 
 ## Section 3 — Billing core (week 3)
 
-### P1-11: Billing schemas + projects + minimal CRM contracts
-**Goal:** Billing module schema in place. Projects exist. Minimal Contract record (CRM-skeleton) wired to projects.
+### P1-11: Billing + CRM schemas (data-only, no UI)
+**Goal:** Billing and CRM module schemas in place. Cross-module FKs from finance back to billing/crm wired up. Deal stages seeded per business line via the template-then-materialize pattern.
 **Module:** billing, crm
 **Depends on:** P1-06
 
+**Note:** Project + contract CRUD UI deferred to P1-12 where projects gain immediate utility via invoice line items and time-entry linkage. Shipping a "create project" form before time entries / invoices exist would fail the 5-minute test (the user has nothing to do with the project they just created).
+
 **Scope:**
-- Create `src/modules/billing/schema.ts` per data-model §7
-- Create `src/modules/crm/schema.ts` per data-model §8 (full schema, but Phase 1 only uses `contracts`, `dealStages`, `rateCards`, `rateCardLines`)
-- Generate migrations
-- Add cross-module FK migration: `billing_projects.contract_id → crm_contracts.id`, plus the deferred FKs from P1-06
-- Seed `deal_stages` per business line (Lead → Qualified → Proposal → Negotiation → Won / Lost)
-- tRPC: `billing.projects.list`, `billing.projects.get`
-- Server Actions: `createProject`, `updateProject`, `softDeleteProject`
-- Pages: `/billing/projects`, `/billing/projects/new`, `/billing/projects/[id]`
-- Project form fields: name, business line, end client party, vendor party, start/end date, default rate, budget hours, contract (optional)
-- Minimal contract form: `/crm/contracts/new` and `/crm/contracts/[id]` — fields: contract number, end client, vendor, dates, status, signed PDF upload, terms
+- Create `src/modules/billing/schema.ts` per data-model §5 (full: projects, time_entries, timesheets, invoices, invoice_lines, payments, payment_applications, subscription_plans, subscriptions, subscription_events, memberships)
+- Create `src/modules/crm/schema.ts` per data-model §6 (full: deal_stage_templates + deal_stage_template_lines reference tables, deal_stages, deals, contracts, rate_cards, rate_card_lines)
+- Generate `0015_billing_crm_tables.sql` via drizzle-kit
+- Hand-write `0016_billing_crm_intra_module_fks.sql` for forward-reference FKs within the new modules
+- Hand-write `0017_finance_billing_crm_cross_module_fks.sql` adding the deferred finance→billing FKs from P1-06 + `billing_projects.contract_id → crm_contracts.id` + `billing_payments.revenue_entry_id → finance_revenue_entries.id`
+- Seed `crm_deal_stage_templates` with `consulting-pipeline` (Lead/Qualified/Proposal Sent/Negotiation/Won/Lost) and `subscription-pipeline` (Trial/Active/Churned)
+- Helper `applyDealStageTemplate(orgId, businessLineId, templateSlug)` mirrors `applyChartOfAccountsTemplate`
+- Seed materializes per BL: services → consulting-pipeline; subscription → subscription-pipeline; ad_revenue → skipped (no pipeline); other → consulting-pipeline fallback
+- `scripts/verify-p1-11.ts` deliberately violates each new FK constraint to prove enforcement, and confirms Varahi's deal_stages were materialized for consulting/matrimony/cxallies but NOT for moonking-yt
 
 **Out of scope:**
+- Project + contract UI (P1-12)
+- Time entry + timesheet workflow (P1-12)
+- Invoice generation (P1-13)
+- Subscription + rate card editor UI (P1-19 / Phase 2)
 - Full deals pipeline UI (Phase 2)
-- Rate card editor UI (Phase 2)
-- Contract templates (Phase 5)
+- `nextProjectNumber` / `nextContractNumber` / `nextDealNumber` / `nextInvoiceNumber` / `nextPaymentNumber` helpers — added when their actions land
 
 **Acceptance:**
-- [ ] Owner can create a project linked to a contract
-- [ ] Contract list and detail pages work
-- [ ] Project list shows status, end client, dates
-- [ ] All FKs honored
+- [ ] All billing + CRM tables exist in DB; visible in Drizzle Studio
+- [ ] All deferred finance→billing FKs from P1-06 enforced
+- [ ] `crm_deal_stage_templates` seeded with both templates
+- [ ] Varahi org has materialized deal_stages for consulting/matrimony/cxallies (consulting-pipeline) and skipped moonking-yt (no pipeline for ad_revenue kind)
+- [ ] FK violation test in `scripts/verify-p1-11.ts` passes (every new constraint rejects deliberate orphan inserts)
 
 ---
 

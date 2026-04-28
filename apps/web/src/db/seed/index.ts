@@ -9,6 +9,8 @@ import { seedChartOfAccounts } from './08-chart-of-accounts'
 import { seedCurrencies } from './09-currencies'
 import { seedTimezones } from './10-timezones'
 import { seedTaxRates } from './11-tax-rates'
+import { seedDealStageTemplates } from './12-deal-stage-templates'
+import { seedDealStages } from './13-deal-stages'
 
 async function main() {
   console.log('Seeding...')
@@ -44,6 +46,12 @@ async function main() {
 
   await seedTaxRates()
   console.log('  ✓ tax_rates      (21 rows, 2026)')
+
+  await seedDealStageTemplates()
+  console.log('  ✓ deal stage templates (consulting-pipeline, subscription-pipeline)')
+
+  await seedDealStages(organizationId)
+  // log line printed inside seedDealStages
 
   console.log('Done.')
 }
