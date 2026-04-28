@@ -18,6 +18,7 @@ import { findUnreversedJournalEntries } from '../lib/journal/find-unreversed'
 import { postExpenseReportApprovalJournal } from '../lib/journal/post-expense-report-approval'
 import { postExpenseReportReimbursementJournal } from '../lib/journal/post-expense-report-reimbursement'
 import { reverseJournalEntry } from '../lib/journal/reverse-entry'
+import { recomputeTaxEstimateForDateChange } from '../lib/tax/recompute'
 import {
   addExpensesToReportSchema,
   approveExpenseReportSchema,
@@ -534,6 +535,16 @@ export const approveExpenseReport = defineAction({
       },
     })
 
+    // Defensive recompute: cash-basis tax already recognized expenses at
+    // entry_date so this is a no-op for our model, but matches the wire-in
+    // spec for forward-compatibility with an accrual mode toggle.
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      null,
+      before.periodStart,
+    )
+
     return {
       result: {
         id: row.id,
@@ -601,6 +612,17 @@ export const rejectExpenseReport = defineAction({
         priorStatus: before.status,
       },
     })
+
+    // Defensive recompute when reverting from approved (matches the wire-in
+    // spec; no-op for cash-basis tax).
+    if (before.status === 'approved') {
+      await recomputeTaxEstimateForDateChange(
+        ctx.tx,
+        ctx.organizationId,
+        null,
+        before.periodStart,
+      )
+    }
 
     return {
       result: { id: row.id, status: row.status, reversedJournalEntries: reversedCount },
@@ -807,6 +829,17 @@ export const softDeleteExpenseReport = defineAction({
         reversedJournalEntries: unreversed.length,
       },
     })
+
+    // Defensive recompute if we reverted journals (approved or reimbursed
+    // states). No-op for cash-basis tax; matches the wire-in spec.
+    if (before.status === 'approved' || before.status === 'reimbursed') {
+      await recomputeTaxEstimateForDateChange(
+        ctx.tx,
+        ctx.organizationId,
+        null,
+        before.periodStart,
+      )
+    }
 
     return {
       result: { id: row.id, reversedJournalEntries: unreversed.length },

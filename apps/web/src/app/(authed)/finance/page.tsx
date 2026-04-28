@@ -5,6 +5,7 @@ import {
   BarChart3,
   FileSpreadsheet,
   CreditCard,
+  Landmark,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -88,12 +89,30 @@ export default function FinanceLandingPage() {
           </Card>
         </Link>
 
+        <Link href="/finance/tax-estimates" className="group">
+          <Card className="h-full transition-shadow hover:shadow-md">
+            <CardHeader>
+              <Landmark className="h-6 w-6 text-primary" />
+              <CardTitle className="mt-2">Tax estimates</CardTitle>
+              <CardDescription>
+                Quarterly federal + state + self-employment tax. Auto-recomputes from revenue
+                and expenses.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <span className="text-sm font-medium text-primary group-hover:underline">
+                Open estimates →
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Card className="h-full opacity-60">
           <CardHeader>
             <BarChart3 className="h-6 w-6 text-muted-foreground" />
             <CardTitle className="mt-2">Reports</CardTitle>
             <CardDescription>
-              Quarterly tax estimate, P&L by business line, expense breakdown.
+              P&L by business line, expense breakdown, KPI dashboards.
             </CardDescription>
           </CardHeader>
           <CardContent>

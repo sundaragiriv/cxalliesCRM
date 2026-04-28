@@ -6,6 +6,7 @@ import { defineAction } from '@/lib/actions/define-action'
 import { active } from '@/lib/db/active'
 import { emitFinanceEvent } from '../lib/event-emitter'
 import { formatMoney } from '../lib/format-money'
+import { recomputeTaxEstimateForDateChange } from '../lib/tax/recompute'
 import {
   createExpenseSchema,
   updateExpenseSchema,
@@ -56,6 +57,13 @@ export const createExpense = defineAction({
         isReimbursable: input.isReimbursable,
       },
     })
+
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      null,
+      input.entryDate,
+    )
 
     return { result: { id: row.id }, recordId: row.id, after: row }
   },
@@ -118,6 +126,13 @@ export const updateExpense = defineAction({
       summary: `Updated expense ${formatMoney(input.amountCents)} — ${input.description}`,
     })
 
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      before.entryDate,
+      input.entryDate,
+    )
+
     return {
       result: { id: row.id },
       recordId: row.id,
@@ -168,6 +183,13 @@ export const softDeleteExpense = defineAction({
       entityId: row.id,
       summary: `Deleted expense ${formatMoney(before.amountCents)} — ${before.description}`,
     })
+
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      before.entryDate,
+      null,
+    )
 
     return {
       result: { id: row.id },

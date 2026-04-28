@@ -8,6 +8,7 @@ import { emitFinanceEvent } from '../lib/event-emitter'
 import { formatMoney } from '../lib/format-money'
 import { postRevenueJournal } from '../lib/journal/post-revenue'
 import { reverseJournalEntry } from '../lib/journal/reverse-entry'
+import { recomputeTaxEstimateForDateChange } from '../lib/tax/recompute'
 import {
   createRevenueSchema,
   updateRevenueSchema,
@@ -77,6 +78,19 @@ export const createRevenue = defineAction({
         journalEntryNumber: journal.entryNumber,
       },
     })
+
+    // 5. Recompute tax estimate for the affected quarter (cash basis: only
+    //    paymentStatus='received' rows count, so non-received entries trigger
+    //    a no-op recompute that still writes the unchanged values).
+    const taxDate = input.receivedAt
+      ? input.receivedAt.slice(0, 10)
+      : input.entryDate
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      null,
+      taxDate,
+    )
 
     return {
       result: { id: row.id },
@@ -181,6 +195,21 @@ export const updateRevenue = defineAction({
       metadata: { isMaterial, journalEntryNumber },
     })
 
+    // Recompute tax estimates for both old and new quarters (date or
+    // payment-recognition date may have moved across a quarter boundary).
+    const oldTaxDate = before.receivedAt
+      ? before.receivedAt.toISOString().slice(0, 10)
+      : before.entryDate
+    const newTaxDate = input.receivedAt
+      ? input.receivedAt.slice(0, 10)
+      : input.entryDate
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      oldTaxDate,
+      newTaxDate,
+    )
+
     return {
       result: { id: row.id },
       recordId: row.id,
@@ -241,6 +270,18 @@ export const softDeleteRevenue = defineAction({
       entityId: row.id,
       summary: `Deleted revenue ${formatMoney(before.amountCents)} — ${before.description}`,
     })
+
+    // Recompute tax estimate for the deleted row's quarter — its income is
+    // gone from the books.
+    const oldTaxDate = before.receivedAt
+      ? before.receivedAt.toISOString().slice(0, 10)
+      : before.entryDate
+    await recomputeTaxEstimateForDateChange(
+      ctx.tx,
+      ctx.organizationId,
+      oldTaxDate,
+      null,
+    )
 
     return {
       result: { id: row.id },

@@ -89,6 +89,10 @@ export async function postExpenseReportApprovalJournal(
   // Pick the report-level business_line for the credit leg by majority among
   // expense lines. Avoids forcing a "report-level" business_line column; uses
   // the data we already have. Ties go to the first encountered.
+  //
+  // Phase 1 simplification — single credit line tagged with the majority BL.
+  // Phase 2 (when P1-22 reporting surfaces per-BL liabilities) revisits via
+  // either a report-level business_line_id or a proportional credit split.
   const blCounts = new Map<string, number>()
   for (const exp of opts.expenses) {
     blCounts.set(exp.businessLineId, (blCounts.get(exp.businessLineId) ?? 0) + 1)

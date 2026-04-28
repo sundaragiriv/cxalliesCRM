@@ -86,6 +86,14 @@ export default [
       // to verify them in isolation. Application code is still bound by
       // the rule.
       'apps/web/tests/**/*.{ts,tsx}',
+      // Verification scripts (one-off end-to-end checks) reach into
+      // internal helpers like tests do. Same allowlist treatment.
+      'apps/web/scripts/**/*.ts',
+      // The tax module's lib/ legitimately reads cross-module reference
+      // data (organizations.defaultFilingStatus, .homeState) to compute
+      // per-org estimates. This is the one finance lib subtree that needs
+      // sibling-schema access; broader lib/ stays locked.
+      'apps/web/src/modules/*/lib/tax/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

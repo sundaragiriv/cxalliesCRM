@@ -3,6 +3,7 @@ import { expensesRouter } from './expenses'
 import { revenueRouter } from './revenue'
 import { expenseReportsRouter } from './expense-reports'
 import { corporateCardsRouter } from './corporate-cards'
+import { taxEstimatesRouter } from './tax-estimates'
 import { pickerOptionsRouter } from './picker-options'
 
 export const financeRouter = router({
@@ -10,5 +11,6 @@ export const financeRouter = router({
   revenue: revenueRouter,
   expenseReports: expenseReportsRouter,
   corporateCards: corporateCardsRouter,
+  taxEstimates: taxEstimatesRouter,
   pickerOptions: pickerOptionsRouter,
 })

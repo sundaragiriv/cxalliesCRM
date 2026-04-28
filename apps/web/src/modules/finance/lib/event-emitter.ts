@@ -29,6 +29,7 @@ export type FinanceEventKind =
   | 'finance.corporateCard.created'
   | 'finance.corporateCard.updated'
   | 'finance.corporateCard.deleted'
+  | 'finance.taxEstimate.paid'
 
 export interface FinanceEventPayload {
   organizationId: string

@@ -41,9 +41,9 @@ if (!url) throw new Error('DATABASE_URL not set')
 const client = postgres(url, { max: 1 })
 const db = drizzle(client)
 
-let createdEntryIds: string[] = []
+const createdEntryIds: string[] = []
 let createdLineIds: string[] = []
-let createdExpenseIds: string[] = []
+const createdExpenseIds: string[] = []
 let createdReportId: string | null = null
 
 function assert(cond: boolean, msg: string) {

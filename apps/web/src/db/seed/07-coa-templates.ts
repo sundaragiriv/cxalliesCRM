@@ -45,7 +45,7 @@ const MULTI_LINE_OPERATOR_LINES: ReadonlyArray<TemplateLineSeed> = [
   // 3xxx Equity
   { accountNumber: '3000', accountName: "Owner's Equity", accountType: 'equity', accountSubtype: 'equity' },
   { accountNumber: '3100', accountName: 'Retained Earnings', accountType: 'equity', accountSubtype: 'equity' },
-  { accountNumber: '3200', accountName: 'Owner Draws', accountType: 'equity', accountSubtype: 'equity' },
+  { accountNumber: '3200', accountName: 'Owner Draws', accountType: 'equity', accountSubtype: 'equity', systemRole: 'owner_draws' },
 
   // 4xxx Revenue (linked to business lines via slug match)
   {
