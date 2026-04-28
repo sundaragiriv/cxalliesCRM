@@ -92,6 +92,35 @@ There is no `pnpm db:rollback`. Drizzle-kit doesn't ship one by design: rollback
 - **Local dev**: drop the DB and re-run from scratch (`docker compose down -v && docker compose up -d && pnpm db:migrate && pnpm db:seed`). Faster than fighting a corrupted migration state.
 - **Production**: hand-write the inverse SQL as a *new* migration. Never delete or modify a migration that's been applied to a production DB; always move forward.
 
+## Data-only migrations: follow-up rules
+
+When a migration is data-only (e.g., a manual SQL file that doesn't change schema, like a backfill or a system_role tag), it copies the previous drizzle-kit snapshot rather than generating a new one. This creates two traps:
+
+1. **Snapshot ID collision.** The copied snapshot shares `id` and `prevId` UUIDs from the chain it cloned. The NEXT auto-generated migration will refuse with "snapshots are pointing to a parent snapshot — collision." Fix: regenerate fresh UUIDs for the copied snapshot's `id` and set `prevId` to the actual previous snapshot's `id`. One Python one-liner per migration:
+
+   ```python
+   import json, uuid
+   def patch(path, new_id, new_prev):
+       with open(path) as f: data = json.load(f)
+       data['id'] = new_id
+       data['prevId'] = new_prev
+       with open(path, 'w') as f: json.dump(data, f, indent='\t')
+
+   with open('drizzle/meta/PREV_snapshot.json') as f: prev = json.load(f)
+   patch('drizzle/meta/NEW_snapshot.json', str(uuid.uuid4()), prev['id'])
+   ```
+
+2. **Monotonic-when trap.** drizzle-kit auto-generates `Date.now()` for new entries' `when` field in `_journal.json`. If a hand-set `when` from a prior data-only migration is in the future, the new auto-generated entry will have a LOWER `when` value, and drizzle's monotonic comparator will silently skip the new migration (see "The `_journal.json` monotonic-`when` trap" above). Fix: bump the new migration's `when` to be greater than every prior entry's `when`.
+
+Both traps trigger silently. Symptom: "No new migrations to apply" or schema diffs appearing twice. **Always check `_journal.json` after generating a new migration on top of any data-only migration in the chain.** Run this sanity check after every `pnpm db:generate`:
+
+```bash
+cat apps/web/drizzle/meta/_journal.json | jq -r '.entries[] | "\(.when)\t\(.tag)"' | \
+  awk 'NR > 1 && $1 < prev { print "OUT OF ORDER: " $0 } { prev = $1 }'
+```
+
+(Empty output = monotonic. Any output names the offending entry.)
+
 ## Conventions
 
 - Migration filename: `NNNN_lowercase_snake_case.sql`. Number gapless from 0000.

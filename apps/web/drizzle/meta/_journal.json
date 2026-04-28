@@ -120,6 +120,13 @@
       "when": 1778208000000,
       "tag": "0016_finance_billing_crm_cross_module_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778294400000,
+      "tag": "0017_time_entries_unique_per_day",
+      "breakpoints": true
     }
   ]
 }

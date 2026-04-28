@@ -360,6 +360,25 @@ All user-facing sequential numbers use a **4-digit zero-padded suffix** with the
 
 **Unique index** on `(organization_id, number)` for every numbered table — guarantees no duplicates if the race ever fires.
 
+### 3.13 Value-at-time-of-event snapshot pattern
+
+When a transaction is recorded against a referenced entity, **snapshot any field of that entity that drives billing, accounting, payroll, or tax math** into the transaction row. Subsequent edits to the source-of-truth entity must NOT rewrite the historical transaction.
+
+**Why**: a contract rate goes up next quarter, but invoices issued under the old rate must still settle at the old rate. A pay rate changes, but pay stubs from before the change reflect the rate the employee actually worked under. An invoice line item's description was "Sprint planning" when sent; renaming the underlying time entry's description doesn't rewrite the customer's bill.
+
+**Phase 1 examples**:
+- `billing.time_entries.billable_rate_cents` snapshots from `billing.projects.default_billable_rate_cents` (or a per-entry override) at entry creation. Project rate edits don't rewrite historical entries.
+- `finance.expense_reports.total_cents` denormalizes the SUM at submit-time; expenses adding/removing post-submit go through the reject + reopen workflow rather than silently drifting the total.
+
+**Phase 2+ targets** (codify when next applicable):
+- `billing.invoice_lines.unit_price_cents` and `description` snapshot from time entries / contract rate cards at invoice generation
+- `payroll.pay_stub_lines.rate_cents` snapshots from employee pay rate at run time
+- `crm.deals.probability` snapshots from deal stage's `default_probability` when the deal moves to that stage (not always — sometimes you want it to track; that's the open design question Phase 2 resolves)
+
+**The rule of thumb**: if the value was used to compute money or send something external (an invoice, a paycheck, a tax payment), snapshot it. If it's just a label or category for filtering, reference it live.
+
+**The schema shape**: explicit columns on the transaction row, NOT NULL where the snapshot is required, with the source-of-truth FK kept alongside for audit. Don't lazily derive at query time — the source of truth is mutable; the transaction is not.
+
 ---
 
 ## 4. API layer

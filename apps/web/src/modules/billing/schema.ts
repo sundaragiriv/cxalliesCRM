@@ -355,6 +355,15 @@ export const timeEntries = pgTable(
     ),
     statusIdx: index('time_status_idx').on(t.status),
     timesheetIdx: index('time_timesheet_idx').on(t.timesheetId),
+    /**
+     * Partial unique on (org, project, user, entry_date) WHERE deleted_at IS NULL.
+     * Enforces "one active time entry per (project, user, day)" — the grid-cell
+     * invariant. Soft-deleted rows can repeat. UPSERT in createTimeEntry uses
+     * this to insert-or-update the cell row.
+     */
+    activeOneCellUnique: uniqueIndex('time_active_one_cell_unique')
+      .on(t.organizationId, t.projectId, t.submittedByUserId, t.entryDate)
+      .where(sql`${t.deletedAt} IS NULL`),
   }),
 )
 

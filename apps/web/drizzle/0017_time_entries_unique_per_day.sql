@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "time_active_one_cell_unique" ON "billing_time_entries" USING btree ("organization_id","project_id","submitted_by_user_id","entry_date") WHERE "billing_time_entries"."deleted_at" IS NULL;
