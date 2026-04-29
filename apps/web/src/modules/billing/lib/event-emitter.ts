@@ -20,6 +20,17 @@ export type BillingEventKind =
   | 'billing.timesheet.rejected'
   | 'billing.timesheet.reopened'
   | 'billing.timesheet.deleted'
+  | 'billing.project.created'
+  | 'billing.project.updated'
+  | 'billing.project.deleted'
+  | 'billing.invoice.created'
+  | 'billing.invoice.sent'
+  | 'billing.invoice.paid'
+  | 'billing.invoice.partiallyPaid'
+  | 'billing.invoice.voided'
+  | 'billing.invoice.deleted'
+  | 'billing.payment.created'
+  | 'billing.payment.deleted'
 
 export interface BillingEventPayload {
   organizationId: string

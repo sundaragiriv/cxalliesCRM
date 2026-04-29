@@ -35,6 +35,7 @@ import {
 import { organizations, parties, businessLines } from '@/modules/parties/schema'
 import { users } from '@/modules/auth/schema'
 import { files } from '@/modules/files/schema'
+import { chartOfAccounts } from '@/modules/finance/schema'
 
 // ============================================================================
 // Subscription plans + subscriptions (no intra-module dependencies; declared
@@ -306,6 +307,15 @@ export const invoiceLines = pgTable(
     amountCents: moneyCents('amount_cents'),
     currencyCode: currencyCode(),
     taxRateBasisPoints: integer('tax_rate_basis_points'),
+    /**
+     * Per-line revenue account override. NULL means resolve at journal-post
+     * time from the line's project → business_line → CoA revenue account.
+     * Required (non-NULL) for manual lines (kind='fixed') with no project.
+     * P1-13 / §3.13.
+     */
+    chartOfAccountsId: uuid('chart_of_accounts_id').references(
+      () => chartOfAccounts.id,
+    ),
     metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamps.createdAt,
     updatedAt: timestamps.updatedAt,

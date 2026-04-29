@@ -391,29 +391,50 @@ The 26 tickets group into **9 sections** mapping to the build sequence. Sections
 
 ---
 
-### P1-13: Invoice generation from approved timesheets + billable expenses
-**Goal:** One-click "create invoice for project + period" that pulls all approved time entries and billable expenses into a draft invoice.
+### P1-13: Invoice generation + project CRUD + payment posting
+**Goal:** One-click "create invoice for project + period" that pulls approved time entries and billable expenses into a draft invoice. Project CRUD UI lands here (deferred from P1-11). Payment posting closes the AR loop.
 **Module:** billing
 **Depends on:** P1-12, P1-09
 
 **Scope:**
-- Helper: `src/modules/billing/lib/invoice-generator.ts` — pure function (projectId, periodStart, periodEnd) → invoice draft
-- tRPC: `billing.invoices.list`, `billing.invoices.get`
-- Server Actions: `generateInvoiceFromProject`, `createInvoice` (manual), `updateInvoice`, `sendInvoice`, `markInvoicePaid`, `voidInvoice`
-- Pages: `/billing/invoices`, `/billing/invoices/new`, `/billing/invoices/[id]`
-- Invoice numbering: `{BL_SLUG}-INV-{YYYY}-{NNNN}` per business line
-- "Generate from timesheets" workflow: pick project + period, preview lines, confirm, draft invoice created with all approved time + billable expenses linked
-- Invoice PDF generation via react-pdf (P1-14 covers PDF generation in detail; this ticket creates the placeholder)
-- Vitest: invoice generator with edge cases (empty period, partial billable, multi-currency)
+- Migration `0018_invoice_line_revenue_account.sql` — adds `chart_of_accounts_id uuid NULL` to `billing_invoice_lines` (per-line revenue account override; auto-resolved from project's BL when NULL)
+- Numbering helpers `nextProjectNumber` / `nextInvoiceNumber` / `nextPaymentNumber` per §3.12 (`PRJ-`/`INV-`/`PAY-YYYY-NNNN`, org-wide; the spec's earlier `{BL_SLUG}-INV-` was inconsistent with §3.12)
+- Project CRUD (deferred from P1-11): tRPC `billing.projects.list`/`get`, actions `createProject`/`updateProject`/`softDeleteProject`, pages `/billing/projects`(list/new/[id])
+- Pure invoice generator helper: `src/modules/billing/lib/invoices/generator.ts` — takes pre-fetched (timeEntries, expenses, project) → array of line drafts. Multi-currency block. §3.13 snapshot rigor: `invoice_lines.description` and `unit_price_cents` snapshot from source at generation; subsequent source edits do NOT rewrite invoice lines.
+- Invoice state machine `lib/invoices/state-machine.ts`: draft → sent → partially_paid/paid; sent → void (blocked if payments exist); overdue is a derived UI badge (`due_date < today AND status IN ('sent','partially_paid')`), NOT a column write. `canceled` enum value is reserved/unused.
+- Journal helpers (in `finance/lib/journal/`):
+  - `postInvoiceJournal` — N+1 lines: 1 debit AR (system_role='ar_default'), N credits per (project's BL × revenue account). Posted on `sendInvoice`.
+  - `postPaymentJournal` — 2 lines: debit `cash_operating`, credit `ar_default`. Posted on each `markInvoicePaid` (each payment row gets its own entry).
+- Revenue-account resolver: `findRevenueAccountForBusinessLine(tx, orgId, blId)` + `MissingRevenueAccountError` (mirrors `MissingSystemAccountError`). Resolution order on each invoice line: line's `chart_of_accounts_id` if set → project's BL revenue account → throw.
+- Server Actions: `generateInvoiceFromProject`, `createInvoice` (manual lines, `chart_of_accounts_id` required per line), `updateInvoice` (draft only), `sendInvoice` (status flip + journal post), `markInvoicePaid` (partial supported; inserts `billing_payments` + `billing_payment_applications` + posts journal), `voidInvoice` (blocks if payments exist; reverses invoice journal), `softDeleteInvoice`
+- Tax-estimate recompute wire-in: `markInvoicePaid` / `voidInvoice` / `softDeleteInvoice` call `recomputeTaxEstimateForDateChange` — invoice payments shift cash-basis revenue recognition date
+- tRPC: `billing.projects.list`/`get`/`count`, `billing.invoices.list`/`get`/`journal`/`previewFromProject`/`count`, `billing.payments.listForInvoice`
+- Pages: `/billing/projects`(list/new/[id]), `/billing/invoices`(list/new/from-project/[id])
+- UI: project CRUD forms; invoice list; invoice generator (project + period picker → preview lines → confirm); manual invoice form; invoice detail with line table + payments + status actions; mark-paid dialog
+- Update `BillingEventKind` union with `invoice.{created,sent,paid,partiallyPaid,voided,deleted}`, `payment.{created,deleted}`, `project.{created,updated,deleted}`
+- Tax handling on invoices: deferred to Phase 4 (`tax_cents=0`, `tax_rate_basis_points=NULL`)
+- Vitest: invoice state machine, generator (multi-currency block, §3.13 snapshot), `postInvoiceJournal` balance, `postPaymentJournal` balance
+- `scripts/verify-p1-13.ts`: full e2e (create project, log time, approve timesheet, create billable expenses, generate invoice, edit source description AFTER gen and assert invoice line UNCHANGED [§3.13 headline test], mark sent, mark partial paid, mark fully paid, void another invoice, assert tax estimate recomputed on payment, org-wide journal balance after every step)
 
 **Out of scope:**
+- PDF rendering (P1-14)
+- Email send via Postmark (P1-14)
+- Refund / credit-memo flow (Phase 2+) — `voidInvoice` blocks if payments exist
+- Multi-invoice payment via single `payment` row (Phase 2 — uses existing `payment_applications` table)
 - Recurring invoice scheduling (Phase 3 with subscriptions)
 - Stripe integration (Phase 3)
+- Tax line items (Phase 4)
+- Invoice templates per business_line (Phase 5)
 
 **Acceptance:**
-- [ ] Generated invoice contains correct time entries (status changed to `invoiced`)
-- [ ] Generated invoice contains correct billable expenses (linked via FK)
-- [ ] Mark-paid creates a payment record + journal entry
+- [ ] Project CRUD ships; numbering is `PRJ-YYYY-NNNN` org-wide
+- [ ] `generateInvoiceFromProject` produces correct invoice lines (status flip on time entries to `'invoiced'`; expense_entries.invoice_id set)
+- [ ] §3.13 headline test: editing a source time_entry's description after invoice generation does NOT rewrite the invoice line
+- [ ] `sendInvoice` posts a balanced multi-line journal (1 debit AR + N credits per BL × revenue account)
+- [ ] `markInvoicePaid` creates a payment record + posts a balanced 2-line journal; partial pay flips status to `partially_paid`; full coverage flips to `paid`
+- [ ] `voidInvoice` blocks with a clear error when payments exist; succeeds with journal reversal otherwise
+- [ ] Tax estimate recomputes on `markInvoicePaid` / `voidInvoice` / `softDeleteInvoice`
+- [ ] Org-wide `SUM(debit_cents) == SUM(credit_cents)` after every step
 - [ ] Five-minute test: invoice a project end-to-end without docs
 
 ---

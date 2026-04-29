@@ -1,0 +1,2 @@
+ALTER TABLE "billing_invoice_lines" ADD COLUMN "chart_of_accounts_id" uuid;--> statement-breakpoint
+ALTER TABLE "billing_invoice_lines" ADD CONSTRAINT "billing_invoice_lines_chart_of_accounts_id_finance_chart_of_accounts_id_fk" FOREIGN KEY ("chart_of_accounts_id") REFERENCES "public"."finance_chart_of_accounts"("id") ON DELETE no action ON UPDATE no action;

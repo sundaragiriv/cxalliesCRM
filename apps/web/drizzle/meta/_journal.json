@@ -127,6 +127,13 @@
       "when": 1778294400000,
       "tag": "0017_time_entries_unique_per_day",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778380800000,
+      "tag": "0018_invoice_line_revenue_account",
+      "breakpoints": true
     }
   ]
 }
