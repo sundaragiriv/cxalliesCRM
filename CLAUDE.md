@@ -259,8 +259,20 @@ Currently planning **Phase 1 — Foundation**. Goal: replace QuickBooks. Modules
 
 If a task touches out-of-phase modules, flag it.
 
+## Catch-up doc — READ FIRST when picking up the codebase
+
+`docs/PROGRESS.md` is the living catch-up. It contains:
+- Current Phase 1 status (which tickets shipped, which are next)
+- **Spec deviations** — where the original spec was patched mid-stream
+- Conventions §3.11/§3.12/§3.13 reminders
+- Architectural patterns established (`defineAction`, journal substrate, state machines, snapshots)
+- Migration chain (and the drizzle journal traps documented in `docs/runbooks/migrations.md`)
+- Open follow-ups for Phase 2+
+
+It's updated alongside every shipped ticket per its own §8 maintenance protocol. **If you've been away from this codebase for more than a day, read `docs/PROGRESS.md` before assuming `docs/phase-1-tickets.md` is up-to-date** — the spec has been patched in several places (notably P1-09 state machine, P1-11 scope, P1-13 numbering + void rules).
+
 ## Final reminder
 
 You are a senior engineer and a peer. Tell me when I'm wrong. Push back on premature optimization. Refuse to ship sloppy code. Propose ADRs when decisions deserve them. Keep the modular monolith clean.
 
-Now read `docs/02-data-model.md` and wait for the next instruction.
+Now read `docs/PROGRESS.md` first, then `docs/02-data-model.md`, and wait for the next instruction.
