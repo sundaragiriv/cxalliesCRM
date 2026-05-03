@@ -468,6 +468,152 @@ The 26 tickets group into **9 sections** mapping to the build sequence. Sections
 
 ---
 
+### P1-15a: Organization-scoped email configuration
+**Goal:** Sender domain, address, name, and Postmark message stream read
+from the `organizations` row, not env vars. Env vars become bootstrap
+defaults consumed only by seed.
+**Module:** parties (owns the `organizations` table per the existing
+layout), billing (consumer), email (lib).
+**Depends on:** P1-14
+**Slot:** Before P1-15. Standalone, independently mergeable.
+
+**Why this exists:** P1-14 coupled tenant identity (From address, From
+name, message stream) to deployment-environment configuration. The data
+model already row-scopes `organizations`, `brands`, and `business_lines`;
+outbound email identity belongs in the same place. Cheaper to fix now
+than after multi-tenant or per-brand sender lands. Codified in
+**ADR-0007** (organization-scoped configuration over env vars).
+
+**Scope:**
+- Migration `0020_organization_email_config.sql` adds four columns to
+  `organizations`:
+  - `email_sender_domain text NULL` — informational; future DKIM-status
+    column hangs off this
+  - `email_sender_address text NULL` — required at send-time
+  - `email_sender_name text NULL` — required at send-time
+  - `postmark_message_stream text NOT NULL DEFAULT 'outbound'`
+  Backfill from env vars at migration time with placeholder fallback for
+  dev machines without prod env set (so a fresh `pnpm db:migrate` on a
+  laptop produces a queryable row, not NULLs)
+- `parties/schema.ts` — Drizzle definition for `organizations` gains
+  the four new columns. The `organizations` table is owned by the
+  parties module (it's the spine the rest of the data model FKs into);
+  the `auth` module reads it through the public API for session →
+  organization resolution
+- `lib/email/from-org.ts` (new) — `getEmailIdentity(tx, orgId)` returning
+  `{ fromAddress, fromName, messageStream, domain }`. Throws
+  `MissingOrgEmailConfigError` when required fields are null. Mirrors
+  the P1-08 `MissingSystemAccountError` and P1-13
+  `MissingRevenueAccountError` shapes
+- `lib/email/postmark.ts` — `sendEmail` signature change. `orgId`
+  becomes a required field on the input. New optional `fromOverride`
+  parameter is the seam for Phase 2 per-brand sender. Don't implement
+  override logic now; just accept and pass through. Wrapper resolves
+  identity via `getEmailIdentity` if `fromOverride` is unset
+- `billing/lib/email/invoice-email.ts` — stops reading env (it doesn't
+  today, but the body builder receives identity from the caller via
+  `brandDisplayName` / `orgLegalName` already). Verify the contract is
+  pure-input per §3.13
+- `billing/actions/invoices.ts` `sendInvoice` — calls `getEmailIdentity`
+  INSIDE the tx (so misconfigured org fails before journal posts);
+  passes resolved identity into the `postCommit` thunk; thunk passes it
+  to `sendEmail`
+- `lib/env.ts` — `POSTMARK_FROM_ADDRESS`, `POSTMARK_FROM_NAME`,
+  `POSTMARK_MESSAGE_STREAM` become **optional**. Add a `zod.refine()`
+  at the schema level (not field level) asserting that in production
+  `NODE_ENV`, `POSTMARK_SERVER_TOKEN` cannot equal `POSTMARK_API_TEST`
+- Seed update — `db/seed/01-organizations.ts` (or wherever Varahi is
+  seeded) populates the four new fields from env at seed time.
+  Idempotent on org existence: re-running seed against an existing org
+  does NOT overwrite values the owner has since edited via UI
+- Settings UI — `/settings/organization/email` page. Read-only display
+  plus edit form. Owner role only per P1-04 permissions.
+  `react-hook-form` + zod resolver per conventions §3.4
+- tRPC — `parties.organization.getEmailConfig` query (parties module
+  owns the table, so the namespace follows §3.4 `{module}.{entity}.{verb}`).
+  `updateOrganizationEmailConfig` Server Action wrapped in `defineAction`
+  (which already runs `withAudit`)
+- PROGRESS.md update — §2 (deviation: P1-14 was env-driven, corrected
+  here), §4 (new pattern: org-scoped config with `from-org.ts` as the
+  cleanest example), §5 (migration 0020), §7 (move "Postmark sender
+  domain" follow-up to reflect that the domain string now lives in the
+  row)
+- `scripts/verify-p1-15a.ts` — see verification section below
+
+**Out of scope:**
+- Multi-tenant infrastructure (Phase 5)
+- Per-brand sender — the `fromOverride` parameter is the reservation;
+  `brands` gains `email_sender_address` in Phase 2
+- DKIM / SPF / DMARC verification UI (Phase 2)
+- Email send history (Phase 2)
+- Bounce handling (Phase 2 — Postmark webhooks)
+- DNS health checks (out of scope; Postmark dashboard owns it)
+
+**Acceptance:**
+- [ ] Migration 0020 applies clean forward and via revert (drop
+      columns; backfill is informational, no data loss on revert)
+- [ ] Varahi org seeded with email config matching env at seed time
+- [ ] `sendInvoice` reads From identity from org row, not env (proven
+      by verify script header assertion against the captured Postmark
+      request payload)
+- [ ] Mutating the org row changes the next invoice's From header
+      without code change or restart
+- [ ] Missing `email_sender_address` throws
+      `MissingOrgEmailConfigError` INSIDE the tx; journal does NOT post
+- [ ] `/settings/organization/email` renders; Owner can edit; non-Owner
+      gets 403 (or hidden, per existing permission patterns)
+- [ ] Edit writes an `audit_log` row (via `defineAction` + `withAudit`)
+- [ ] Production-token guard added: `POSTMARK_API_TEST` rejected when
+      `NODE_ENV=production`
+- [ ] `tsc` clean, `lint` clean, `test` 89 → ~95 passing (new tests
+      cover the resolver, the env-schema refine, and the body-builder
+      pure-input contract)
+- [ ] PROGRESS.md updated §2 + §4 + §5 + §7
+- [ ] ADR-0007 committed
+- [ ] **Five-minute test:** fresh dev install with env unset starts,
+      seeds with placeholders, dev edits values via Settings UI without
+      touching env files
+
+**Verify script must:**
+- Assert migration 0020 is applied; the four new columns exist with
+  the expected types/nullability
+- Assert seed populated Varahi from env (or placeholders if env unset
+  at seed time)
+- Generate a draft invoice, call `sendInvoice`, **intercept the Postmark
+  fetch call**, and assert the `From` header in the request payload
+  matches the org row, NOT the env var. Approach: stub `globalThis.fetch`
+  for the duration of the verify run and capture the request body for
+  assertion (sandbox 200 proves the request was *valid*; we need to
+  prove it was *correct*)
+- Mutate the org row's `email_sender_address`, send another invoice,
+  assert the new From header reflects the change (proves DB-driven, not
+  cached at module load)
+- Set `email_sender_address` to NULL, send, assert
+  `MissingOrgEmailConfigError` is thrown BEFORE journal post (count of
+  journal entries for the invoice = 0 after the failed send)
+- Assert `lib/env.ts` allows missing `POSTMARK_FROM_ADDRESS` /
+  `POSTMARK_FROM_NAME` / `POSTMARK_MESSAGE_STREAM` in test env (parses
+  successfully without them)
+
+**Notes for implementer:**
+- Order is critical: `getEmailIdentity` → journal post → commit →
+  email send (in `postCommit`). Misconfigured org must fail BEFORE
+  journal post. The error surfaces with `fieldErrors` so the UI can
+  point the owner at the right Settings page.
+- `fromOverride` is the Phase 2 seam. Accept the param; do NOT branch
+  on it now. Phase 2's brand-level resolver lands behind that seam
+  without changing call sites.
+- Don't store `from_email_validated_at` yet — that's the Phase 2
+  DKIM verification flow.
+- **No literal `varahi.ai` (or `cxallies.com`, `varahigroup.com`) in
+  code.** Those strings live in seed data only. Tests assert against
+  whatever the seed produced, not against hardcoded domains.
+- Naming: `email_sender_*` columns (not `from_*` or `postmark_*`),
+  because `From:` is one consumer; future SES / Mailgun migrations
+  shouldn't require a column rename.
+
+---
+
 ### P1-15: Cloudflare R2 setup + Google Drive picker integration
 **Goal:** R2 wired for production. Google Drive OAuth flow lets the owner attach Drive files to records.
 **Module:** files
