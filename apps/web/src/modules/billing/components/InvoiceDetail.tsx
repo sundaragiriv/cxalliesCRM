@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   ArrowLeft,
   CircleDollarSign,
+  Download,
   Loader2,
   Send,
   Trash2,
@@ -100,6 +101,48 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
     }
   }
 
+  async function runSendInvoice(label: 'send' | 'resend') {
+    setPending(label)
+    try {
+      const result = await sendInvoice({ id: invoice.id })
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      const verb = result.data.isResend ? 'Re-sent' : 'Sent'
+      if (result.data.emailSent) {
+        toast.success(
+          `${verb} invoice — emailed to ${invoice.billToEmail ?? 'recipient'} (PDF v${result.data.pdfVersion})`,
+        )
+      } else {
+        toast.warning(
+          `PDF v${result.data.pdfVersion} generated and recorded, but email failed: ${result.data.emailError ?? 'unknown'}. Use Resend to retry.`,
+          { duration: 12000 },
+        )
+      }
+      await refresh()
+      router.refresh()
+    } finally {
+      setPending(null)
+    }
+  }
+
+  async function downloadPdf() {
+    setPending('download')
+    try {
+      const data = await utils.billing.invoices.pdfUrl.fetch({
+        invoiceId: invoice.id,
+      })
+      window.open(data.url, '_blank', 'noopener')
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Could not load PDF',
+      )
+    } finally {
+      setPending(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -148,24 +191,48 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {allowed.includes('sent') && (
+        {status === 'draft' && (
           <Button
             size="sm"
             disabled={pending !== null}
-            onClick={() =>
-              runAction(
-                'send',
-                () => sendInvoice({ id: invoice.id }),
-                'Marked as sent — journal posted',
-              )
-            }
+            onClick={() => runSendInvoice('send')}
           >
             {pending === 'send' ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            Mark as sent
+            Send invoice
+          </Button>
+        )}
+        {(status === 'sent' || status === 'partially_paid' || status === 'paid') && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending !== null}
+            onClick={() => runSendInvoice('resend')}
+          >
+            {pending === 'resend' ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            Resend
+          </Button>
+        )}
+        {invoice.pdfFileId && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending !== null}
+            onClick={() => downloadPdf()}
+          >
+            {pending === 'download' ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Download PDF{invoice.pdfVersion > 1 ? ` (v${invoice.pdfVersion})` : ''}
           </Button>
         )}
         {(status === 'sent' || status === 'partially_paid') && remainingCents > 0 && (

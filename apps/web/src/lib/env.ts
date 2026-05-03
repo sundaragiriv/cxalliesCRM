@@ -22,6 +22,20 @@ const schema = z.object({
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET: z.string().min(1),
+
+  // Postmark transactional email (sandbox token in dev, prod token at P1-26 deploy).
+  // Use 'POSTMARK_API_TEST' as the server token to hit Postmark's test mode without
+  // a real account — emails are accepted but never delivered.
+  POSTMARK_SERVER_TOKEN: z.string().min(1),
+  POSTMARK_FROM_ADDRESS: z.string().email(),
+  POSTMARK_FROM_NAME: z.string().min(1).default('CXAllies'),
+  // Postmark message stream — 'outbound' is the default transactional stream.
+  POSTMARK_MESSAGE_STREAM: z.string().min(1).default('outbound'),
+
+  // Public-facing base URL for links rendered into outbound emails.
+  // CRITICAL: localhost in dev, https://app.cxallies.com in prod. Misconfiguration
+  // here silently breaks every "view in browser" link in customer inboxes.
+  APP_BASE_URL: z.string().url().default('http://localhost:3000'),
 })
 
 const parsed = schema.safeParse(process.env)

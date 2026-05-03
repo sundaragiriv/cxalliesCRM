@@ -94,7 +94,7 @@ export function defineAction<TInput, TOutput>(
     const userAgent = reqHeaders.get('user-agent')
 
     try {
-      const result = await db.transaction(async (tx) => {
+      const committed = await db.transaction(async (tx) => {
         const ctx: ActionContext = {
           tx,
           userId: session.user.id,
@@ -117,10 +117,19 @@ export function defineAction<TInput, TOutput>(
           userAgent,
         })
 
-        return output.result
+        return { result: output.result, postCommit: output.postCommit }
       })
 
-      return { success: true, data: result }
+      // External side effects (email, webhooks) run AFTER the tx commits.
+      // A failure here does NOT roll back the committed DB writes — the
+      // thunk reports its own success/failure via fields that get merged
+      // into `data`.
+      if (committed.postCommit) {
+        const extra = await committed.postCommit()
+        return { success: true, data: { ...committed.result, ...extra } }
+      }
+
+      return { success: true, data: committed.result }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       return { success: false, error: message }

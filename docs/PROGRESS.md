@@ -4,7 +4,7 @@
 authoritative status doc — updated after every shipped ticket. Pairs with
 `docs/phase-1-tickets.md` (the spec) and `docs/03-conventions.md` (the rules).
 
-Last updated: **2026-04-28** after P1-13 (`8a33b33`).
+Last updated: **2026-05-02** after P1-14 (in flight; awaits migration apply).
 
 ---
 
@@ -12,7 +12,7 @@ Last updated: **2026-04-28** after P1-13 (`8a33b33`).
 
 **Branch:** `main` · **Latest commit:** `8a33b33` · **Working tree:** clean
 
-**Phase 1 status:** 13 of 27 tickets shipped. **Up next: P1-14** (invoice PDF + Postmark email).
+**Phase 1 status:** 14 of 27 tickets shipped (P1-14 in flight; pending migration apply + verify run). **Up next: P1-15** (R2 setup + Drive picker).
 
 | Ticket | Status | Commit | Brief |
 |---|---|---|---|
@@ -23,8 +23,9 @@ Last updated: **2026-04-28** after P1-13 (`8a33b33`).
 | P1-11 | ✅ | `2530f3b` | billing + crm schemas + cross-module FKs + deal-stage templates |
 | P1-12 | ✅ | `0fbe1ac` | time entries + weekly timesheet workflow |
 | P1-13 | ✅ | `8a33b33` | invoicing + project CRUD + payment posting |
-| P1-14 | ⏳ next | — | invoice PDF + Postmark email |
-| P1-15 → P1-27 | ⏳ | — | see `phase-1-tickets.md` |
+| P1-14 | ✅ | (this branch) | invoice PDF (@react-pdf/renderer) + Postmark email + ADR-0006 |
+| P1-15 | ⏳ next | — | R2 production + Drive picker |
+| P1-16 → P1-27 | ⏳ | — | see `phase-1-tickets.md` |
 
 ---
 
@@ -75,6 +76,45 @@ records *why* in plain English so future sessions don't get whiplash.
   conventions — billable rate snapshots from project at time-entry
   creation; project rate edits don't rewrite history.
 
+### P1-14 (invoice PDF + email)
+- **Dropped `react-pdf` (PDF.js viewer), added `@react-pdf/renderer`** — the
+  original `CLAUDE.md` tech-stack table conflated the two packages. The
+  viewer was never the right tool for our use case; native browser PDF
+  viewing via `<a target="_blank">` to a signed R2 URL is what we ship.
+  See **ADR-0006** for the full reasoning.
+- **No in-app PDF viewer.** `FilePreview` for PDFs renders an "Open PDF"
+  link to a new tab; `InvoiceDetail` "Download PDF" does the same. Browser
+  natively renders. The expense receipt preview was migrated off the
+  embedded viewer in this ticket.
+- **Versioned R2 keys for generated PDFs**:
+  `{org}/billing/invoices/{invoice_id}/v{N}/invoice-{number}.pdf`. Each
+  send / resend produces a NEW `files` row at a new versioned key; older
+  versions are preserved (R2 storage is effectively free at our scale,
+  audit trail value is high). `invoices.pdf_version` int column tracks
+  the current version; `pdf_file_id` points at the latest.
+- **`sendInvoice` is idempotent across resends.** First send (status='draft')
+  posts the journal, sets `sent_at`, flips status. Resend (status in
+  ['sent','partially_paid','paid']) regenerates the PDF + re-emails but
+  does NOT re-post the journal and does NOT bump `sent_at`. Status='void'
+  refuses (re-issue via `createInvoice` / `generateInvoiceFromProject`).
+- **Postmark via fetch (no SDK).** Typed wrapper with structured error
+  classification: `transient` (retriable), `recipient` (hard bounce / inactive,
+  do not retry same address), `config` (sender signature unconfirmed —
+  ops fix), `invalid_request` (malformed). Magic dev token
+  `POSTMARK_API_TEST` returns synthetic 200s for tests.
+- **External side effects fire AFTER tx commit.** `defineAction` extended
+  with an optional `postCommit` thunk on the handler return. The thunk
+  runs after the transaction commits and its result merges (shallow spread)
+  into `data`. PDF + R2 + journal commit atomically; email sends post-commit
+  and reports its success/failure via `emailSent` / `emailMessageId` /
+  `emailError` fields. Email failure does NOT roll back the committed
+  send — the user retries via the **Resend** button.
+- **30-day signed URLs in invoice emails.** Phase 2 follow-up: replace
+  with auth-checked route handler that signs fresh URLs on access (see §7).
+- **Brand → accent hex map is in code** (`_invoice-pdf-payload.ts`).
+  P1-25 migrates this to an `accent_hex` column on `brands`.
+- **`Mark as sent` button renamed to `Send invoice`.**
+
 ### P1-13 (invoicing)
 - **Org-wide invoice numbering** `INV-YYYY-NNNN` (per §3.12) — NOT the
   spec's earlier per-BL `{BL_SLUG}-INV-`. Per-BL parallel sequences
@@ -111,12 +151,22 @@ future tickets.
 
 ## 4. Architectural patterns established
 
-### `defineAction` unified Server Action wrapper (P1-08)
+### `defineAction` unified Server Action wrapper (P1-08, extended P1-14)
 `src/lib/actions/define-action.ts` — opens a tx, runs permission +
 zod parse + handler + audit_log insert in one pass. Every mutation in the
 codebase goes through it. The handler receives `ctx.tx` for atomic
 side-effects (mutation + journal post + activity emit + audit row all
 commit together or roll back together).
+
+**P1-14 addition: `postCommit` thunk.** Handlers can return an optional
+`postCommit: () => Promise<Partial<TResult>>` alongside `result`. The
+thunk fires AFTER the tx commits — used for external side effects (email,
+webhooks, third-party APIs) that must not roll back if the DB writes
+succeeded. Thunk's return is shallow-merged into `data`. Thunk failure
+does NOT roll back the committed tx; the thunk reports its own success
+/ failure via merged-in fields. First user is `sendInvoice` (Postmark
+email); pattern is reusable for any action that combines accounting state
++ external delivery.
 
 ### Journal substrate (P1-08+)
 `src/modules/finance/lib/journal/`:
@@ -210,6 +260,7 @@ counters approach in Phase 2.
 | 0016 | finance_billing_crm_cross_module_fks | hand-written (P1-11) |
 | 0017 | time_entries_unique_per_day | partial unique on (org, project, user, date) (P1-12) |
 | 0018 | invoice_line_revenue_account | adds `chart_of_accounts_id` to invoice lines (P1-13) |
+| 0019 | invoice_pdf_version | adds `pdf_version` int default 0 (P1-14) — per-send version tracker for invoice PDFs |
 
 ---
 
@@ -260,6 +311,16 @@ until their target phase, but useful context.
   Phase 1
 - **Per-line back-reference for expense → invoice line** (currently
   table-level via `expense_entries.invoice_id`)
+- **Auth-checked invoice PDF route** to replace 30-day signed URLs in
+  outbound emails. P1-14 ships 30-day URLs as the pragmatic Phase 1
+  call; Phase 2 introduces `/api/invoices/:id/pdf` that checks auth and
+  signs a fresh URL on each access. Eliminates the "email link expires
+  after 30 days" footgun for clients who archive invoices.
+- **Postmark sender domain verification** (DKIM/SPF/DMARC). P1-14 ships
+  against the `POSTMARK_API_TEST` sandbox token. Production deploy at
+  P1-26 needs a real verified sender domain — `invoices@cxallies.com` or
+  `billing@varahigroup.com` (decision pending). DNS records take 24-48h
+  to propagate; start them well before P1-26.
 
 ### Phase 4
 - **Standard deduction + QBI + retirement + HSA** for tax calculator —
@@ -276,6 +337,11 @@ until their target phase, but useful context.
   it as enum since universal across SMBs)
 - **Mobile time entry** (Phase 1 grid is desktop-first)
 - **Custom invoice templates per business_line**
+- **Brand `accent_hex` column on `brands`** — P1-14 hardcodes the
+  brand-slug → hex map in `_invoice-pdf-payload.ts`. P1-25 migrates this
+  to a column. Bumping the column also requires regenerating sent
+  invoice PDFs (or NOT — old PDFs preserve the original brand color
+  by design, since each version is a snapshot at render time).
 
 ### Documentation debt
 - `docs/02-data-model.md §6` had a 3-digit-padded `EXP-2026-001` example;

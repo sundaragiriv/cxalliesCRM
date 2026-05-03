@@ -134,6 +134,13 @@
       "when": 1778380800000,
       "tag": "0018_invoice_line_revenue_account",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778467200000,
+      "tag": "0019_invoice_pdf_version",
+      "breakpoints": true
     }
   ]
 }

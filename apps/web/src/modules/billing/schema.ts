@@ -267,6 +267,7 @@ export const invoices = pgTable(
     paidCents: moneyCents('paid_cents').default(0),
     status: invoiceStatusEnum('status').notNull(),
     pdfFileId: uuid('pdf_file_id').references(() => files.id),
+    pdfVersion: integer('pdf_version').notNull().default(0),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     voidedAt: timestamp('voided_at', { withTimezone: true }),

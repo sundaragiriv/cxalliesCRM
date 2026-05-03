@@ -10,6 +10,7 @@ import {
   timeEntries,
 } from '../schema'
 import { expenseEntries } from '@/modules/finance/schema'
+import { parties } from '@/modules/parties/schema'
 import { defineAction } from '@/lib/actions/define-action'
 import { active } from '@/lib/db/active'
 import { emitBillingEvent } from '../lib/event-emitter'
@@ -31,6 +32,13 @@ import { postInvoiceJournal } from '@/modules/finance/lib/journal/post-invoice'
 import { postPaymentJournal } from '@/modules/finance/lib/journal/post-payment'
 import { reverseJournalEntry } from '@/modules/finance/lib/journal/reverse-entry'
 import { recomputeTaxEstimateForDateChange } from '@/modules/finance/lib/tax/recompute'
+import { loadInvoicePdfPayload } from './_invoice-pdf-payload'
+import { renderInvoicePDF } from '../lib/invoice-pdf/render'
+import { buildInvoicePdfR2Key } from '../lib/invoice-pdf/r2-key'
+import { uploadBytesAsFile } from '@/modules/files/actions/upload-bytes'
+import { presignedDownloadUrl } from '@/modules/files/lib/r2'
+import { sendEmail } from '@/lib/email/postmark'
+import { buildInvoiceEmail } from '../lib/email/invoice-email'
 import {
   createInvoiceSchema,
   generateInvoiceFromProjectSchema,
@@ -41,6 +49,11 @@ import {
   voidInvoiceSchema,
 } from './invoices-schema'
 import type { FinanceTx } from '@/lib/audit/with-audit'
+
+// Phase 1: 30-day signed URL embedded in invoice emails. PROGRESS.md §7
+// tracks the Phase 2 follow-up (auth-checked route handler signs a fresh
+// URL on each access).
+const INVOICE_EMAIL_URL_TTL_SECONDS = 30 * 24 * 60 * 60
 
 const SOURCE_TABLE = 'billing_invoices'
 
@@ -401,6 +414,32 @@ export const updateInvoice = defineAction({
   },
 })
 
+/**
+ * sendInvoice — first-send and resend.
+ *
+ * First send (status='draft'):
+ *   - assertTransition(draft → sent)
+ *   - postInvoiceJournal (AR debit + revenue credits)
+ *   - render PDF, upload to R2 with versioned key (v1)
+ *   - update: pdf_file_id, pdf_version=1, sent_at=now, status='sent'
+ *   - emit billing.invoice.sent
+ *   - postCommit: send Postmark email with PDF attachment
+ *
+ * Resend (status in ['sent','partially_paid','paid']):
+ *   - NO journal post (already posted on first send; idempotent by design)
+ *   - render PDF, upload to R2 with versioned key (vN+1)
+ *   - update: pdf_file_id, pdf_version=N+1 (sent_at and status untouched)
+ *   - emit billing.invoice.sent with metadata.isResend=true
+ *   - postCommit: send Postmark email with PDF attachment
+ *
+ * Refused for status in ['void','overdue','canceled'] — re-issue voided
+ * invoices via createInvoice / generateInvoiceFromProject; 'overdue' and
+ * 'canceled' are not written values.
+ *
+ * §3.13: the rendered PDF snapshots org/brand/party state at render time.
+ * The original-as-sent v1 PDF is preserved in R2 even after a resend
+ * regenerates v2 (each version is a separate `files` row at its own R2 key).
+ */
 export const sendInvoice = defineAction({
   permission: { module: 'billing', action: 'write' },
   audit: { table: SOURCE_TABLE, action: 'update' },
@@ -408,12 +447,38 @@ export const sendInvoice = defineAction({
   handler: async (input, ctx) => {
     const before = await loadInvoice(ctx.tx, ctx.organizationId, input.id)
     if (!before) throw new Error('Invoice not found')
-    assertTransition(before.status as InvoiceStatus, 'sent')
+
+    const status = before.status as InvoiceStatus
+    const isResend =
+      status === 'sent' || status === 'partially_paid' || status === 'paid'
+
+    if (!isResend) {
+      // First send — must be a valid draft → sent transition.
+      assertTransition(status, 'sent')
+    }
+
     if (before.totalCents <= 0) {
       throw new Error('Cannot send an invoice with $0 total')
     }
 
-    // Load lines for journal posting.
+    // Bill-to must have a deliverable email.
+    const [billTo] = await ctx.tx
+      .select({
+        id: parties.id,
+        displayName: parties.displayName,
+        primaryEmail: parties.primaryEmail,
+      })
+      .from(parties)
+      .where(eq(parties.id, before.billToPartyId))
+      .limit(1)
+    if (!billTo) throw new Error('Bill-to party not found')
+    if (!billTo.primaryEmail) {
+      throw new Error(
+        `Cannot send: ${billTo.displayName} has no email on file. Add one on the contact and try again.`,
+      )
+    }
+
+    // Load lines for journal posting (first send only) and PDF reference.
     const lines = await ctx.tx
       .select({
         id: invoiceLines.id,
@@ -429,52 +494,97 @@ export const sendInvoice = defineAction({
       throw new Error('Cannot send an invoice with no lines')
     }
 
-    // For lines without explicit chart_of_accounts_id, look up the project's BL.
-    const projectIds = Array.from(
-      new Set(
-        lines.map((l) => l.projectId).filter((id): id is string => id != null),
-      ),
+    let journalEntryNumber: string | null = null
+
+    if (!isResend) {
+      // For lines without explicit chart_of_accounts_id, look up the project's BL.
+      const projectIds = Array.from(
+        new Set(
+          lines.map((l) => l.projectId).filter((pid): pid is string => pid != null),
+        ),
+      )
+      const projectBLs = projectIds.length
+        ? await ctx.tx
+            .select({ id: projects.id, businessLineId: projects.businessLineId })
+            .from(projects)
+            .where(
+              and(
+                eq(projects.organizationId, ctx.organizationId),
+                sql`${projects.id} = ANY(${projectIds}::uuid[])`,
+              ),
+            )
+        : []
+      const blByProject = new Map(
+        projectBLs.map((p) => [p.id, p.businessLineId]),
+      )
+
+      const sentDate = new Date().toISOString().slice(0, 10)
+      const journal = await postInvoiceJournal(ctx.tx, {
+        organizationId: ctx.organizationId,
+        invoiceId: before.id,
+        invoiceNumber: before.invoiceNumber,
+        entryDate: sentDate,
+        totalCents: before.totalCents,
+        currencyCode: before.currencyCode,
+        billToPartyId: before.billToPartyId,
+        invoiceBusinessLineId: before.businessLineId,
+        lines: lines.map((l) => ({
+          id: l.id,
+          amountCents: l.amountCents,
+          chartOfAccountsId: l.chartOfAccountsId,
+          projectBusinessLineId: l.projectId
+            ? (blByProject.get(l.projectId) ?? null)
+            : null,
+          description: l.description,
+        })),
+      })
+      journalEntryNumber = journal.entryNumber
+    }
+
+    // Build the PDF payload (snapshots org/brand/party/lines per §3.13)
+    // and render. Render is CPU-bound (~50-200ms) but stays inside the tx
+    // because the resulting bytes need the files-row insert to commit
+    // atomically with the invoice update.
+    const newPdfVersion = (before.pdfVersion ?? 0) + 1
+    const payload = await loadInvoicePdfPayload(
+      ctx.tx,
+      ctx.organizationId,
+      before.id,
+      newPdfVersion,
     )
-    const projectBLs = projectIds.length
-      ? await ctx.tx
-          .select({ id: projects.id, businessLineId: projects.businessLineId })
-          .from(projects)
-          .where(
-            and(
-              eq(projects.organizationId, ctx.organizationId),
-              sql`${projects.id} = ANY(${projectIds}::uuid[])`,
-            ),
-          )
-      : []
-    const blByProject = new Map(projectBLs.map((p) => [p.id, p.businessLineId]))
+    const pdfBytes = await renderInvoicePDF(payload)
 
-    const today = input.id // unused; placeholder
-    void today
-    const sentDate = new Date().toISOString().slice(0, 10)
-
-    const journal = await postInvoiceJournal(ctx.tx, {
+    const r2Key = buildInvoicePdfR2Key({
       organizationId: ctx.organizationId,
       invoiceId: before.id,
       invoiceNumber: before.invoiceNumber,
-      entryDate: sentDate,
-      totalCents: before.totalCents,
-      currencyCode: before.currencyCode,
-      billToPartyId: before.billToPartyId,
-      invoiceBusinessLineId: before.businessLineId,
-      lines: lines.map((l) => ({
-        id: l.id,
-        amountCents: l.amountCents,
-        chartOfAccountsId: l.chartOfAccountsId,
-        projectBusinessLineId: l.projectId
-          ? (blByProject.get(l.projectId) ?? null)
-          : null,
-        description: l.description,
-      })),
+      version: newPdfVersion,
     })
+
+    const fileFilename = `invoice-${before.invoiceNumber}.pdf`
+    const uploaded = await uploadBytesAsFile(ctx.tx, {
+      organizationId: ctx.organizationId,
+      uploadedByUserId: ctx.userId,
+      r2Key,
+      filename: fileFilename,
+      mimeType: 'application/pdf',
+      bytes: pdfBytes,
+    })
+
+    // Update invoice — first send sets status + sent_at; resend touches only
+    // pdf_file_id and pdf_version.
+    const updateSet = isResend
+      ? { pdfFileId: uploaded.fileId, pdfVersion: newPdfVersion }
+      : {
+          pdfFileId: uploaded.fileId,
+          pdfVersion: newPdfVersion,
+          status: 'sent' as const,
+          sentAt: new Date(),
+        }
 
     const [row] = await ctx.tx
       .update(invoices)
-      .set({ status: 'sent', sentAt: new Date() })
+      .set(updateSet)
       .where(
         and(
           eq(invoices.id, before.id),
@@ -482,7 +592,7 @@ export const sendInvoice = defineAction({
         ),
       )
       .returning()
-    if (!row) throw new Error('Failed to mark invoice sent')
+    if (!row) throw new Error('Failed to update invoice after PDF generation')
 
     await emitBillingEvent(ctx.tx, 'billing.invoice.sent', {
       organizationId: ctx.organizationId,
@@ -491,18 +601,95 @@ export const sendInvoice = defineAction({
       partyId: row.billToPartyId,
       entityTable: SOURCE_TABLE,
       entityId: row.id,
-      summary: `Marked invoice ${row.invoiceNumber} as sent — ${(row.totalCents / 100).toFixed(2)} ${row.currencyCode}`,
+      summary: isResend
+        ? `Re-sent invoice ${row.invoiceNumber} (v${newPdfVersion})`
+        : `Sent invoice ${row.invoiceNumber} — ${(row.totalCents / 100).toFixed(2)} ${row.currencyCode}`,
       metadata: {
-        invoiceJournalEntryNumber: journal.entryNumber,
+        invoiceJournalEntryNumber: journalEntryNumber,
         totalCents: row.totalCents,
+        pdfVersion: newPdfVersion,
+        pdfFileId: uploaded.fileId,
+        isResend,
       },
     })
 
+    // Build email body now (cheap; pure) so the postCommit thunk has
+    // everything captured. Signed URL is generated outside the tx (also
+    // cheap; the AWS SDK signer is local).
+    const totalDisplay = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: row.currencyCode,
+    }).format(row.totalCents / 100)
+
+    const billToEmail = billTo.primaryEmail
+    const billToName = billTo.displayName
+    const accentHex = payload.brand.accentHex
+    const brandDisplay = payload.brand.displayName
+    const orgLegal = payload.org.legalName
+    const invoiceNumber = row.invoiceNumber
+    const dueDate = row.dueDate
+    const notes = row.notes
+
     return {
-      result: { id: row.id, journalEntryNumber: journal.entryNumber },
+      result: {
+        id: row.id,
+        journalEntryNumber,
+        pdfFileId: uploaded.fileId,
+        pdfVersion: newPdfVersion,
+        isResend,
+        emailSent: false,
+        emailMessageId: null as string | null,
+        emailError: null as string | null,
+      },
       recordId: row.id,
       before: before as Record<string, unknown>,
       after: row as Record<string, unknown>,
+      postCommit: async () => {
+        const pdfViewUrl = await presignedDownloadUrl(
+          uploaded.r2Key,
+          INVOICE_EMAIL_URL_TTL_SECONDS,
+        )
+        const email = buildInvoiceEmail({
+          brandDisplayName: brandDisplay,
+          orgLegalName: orgLegal,
+          invoiceNumber,
+          totalDisplay,
+          dueDate,
+          billToDisplayName: billToName,
+          pdfViewUrl,
+          accentHex,
+          notes,
+        })
+        const result = await sendEmail({
+          to: billToEmail,
+          subject: email.subject,
+          htmlBody: email.htmlBody,
+          textBody: email.textBody,
+          tag: 'invoice-send',
+          metadata: {
+            invoiceNumber,
+            invoiceId: row.id,
+            pdfVersion: String(newPdfVersion),
+          },
+          attachments: [
+            {
+              Name: fileFilename,
+              Content: pdfBytes.toString('base64'),
+              ContentType: 'application/pdf',
+            },
+          ],
+        })
+        if (result.ok) {
+          return {
+            emailSent: true,
+            emailMessageId: result.messageID,
+          }
+        }
+        return {
+          emailSent: false,
+          emailError: `[${result.kind} #${result.errorCode}${result.retriable ? ' retriable' : ''}] ${result.message}`,
+        }
+      },
     }
   },
 })

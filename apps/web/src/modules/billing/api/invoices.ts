@@ -14,7 +14,9 @@ import {
 } from '@/modules/billing/schema'
 import { businessLines, parties } from '@/modules/parties/schema'
 import { chartOfAccounts, expenseEntries, journalEntries, journalLines } from '@/modules/finance/schema'
+import { files } from '@/modules/files/schema'
 import { active } from '@/lib/db/active'
+import { presignedDownloadUrl } from '@/modules/files/lib/r2'
 
 function getOrgId(ctx: { user: unknown }): string {
   const orgId = (ctx.user as { organizationId?: string }).organizationId
@@ -107,6 +109,9 @@ export const invoicesRouter = router({
           voidedAt: invoices.voidedAt,
           terms: invoices.terms,
           notes: invoices.notes,
+          pdfFileId: invoices.pdfFileId,
+          pdfVersion: invoices.pdfVersion,
+          billToEmail: parties.primaryEmail,
           createdAt: invoices.createdAt,
           updatedAt: invoices.updatedAt,
         })
@@ -256,6 +261,46 @@ export const invoicesRouter = router({
         .orderBy(asc(expenseEntries.entryDate))
 
       return { project, sourceTimes, sourceExpenses }
+    }),
+
+  /**
+   * Signed download URL for the current invoice PDF. Short-lived (5 min)
+   * by default — used by the in-app "Download PDF" link, not by emails.
+   * Email links are signed at send time with a 30-day TTL.
+   */
+  pdfUrl: procedureWithAuth({ module: 'billing', action: 'read' })
+    .input(z.object({ invoiceId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = getOrgId(ctx)
+      const [row] = await db
+        .select({
+          fileId: files.id,
+          r2Key: files.r2Key,
+          filename: files.filename,
+          pdfVersion: invoices.pdfVersion,
+        })
+        .from(invoices)
+        .innerJoin(files, eq(files.id, invoices.pdfFileId))
+        .where(
+          and(
+            eq(invoices.id, input.invoiceId),
+            eq(invoices.organizationId, orgId),
+            active(invoices),
+          ),
+        )
+        .limit(1)
+      if (!row || !row.r2Key) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Invoice has no PDF yet — send the invoice to generate one.',
+        })
+      }
+      const url = await presignedDownloadUrl(row.r2Key, 300)
+      return {
+        url,
+        filename: row.filename,
+        pdfVersion: row.pdfVersion,
+      }
     }),
 
   count: procedureWithAuth({ module: 'billing', action: 'read' }).query(

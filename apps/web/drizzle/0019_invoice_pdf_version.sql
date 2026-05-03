@@ -1,0 +1,1 @@
+ALTER TABLE "billing_invoices" ADD COLUMN "pdf_version" integer DEFAULT 0 NOT NULL;

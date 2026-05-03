@@ -1,8 +1,7 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
+import { ExternalLink, FileText, Loader2 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
-import { PdfViewer } from './PdfViewer'
 
 export interface FilePreviewProps {
   fileId: string
@@ -10,8 +9,12 @@ export interface FilePreviewProps {
 }
 
 /**
- * Renders an image or PDF preview given a file id. Looks up a presigned R2 URL
- * via tRPC and routes to <img> for images or <PdfViewer> for PDFs.
+ * Renders a preview given a file id. Looks up a presigned R2 URL via tRPC
+ * and dispatches:
+ *   - image/* → inline <img>
+ *   - application/pdf → "Open PDF" link to the browser's native PDF viewer
+ *     (per ADR-0006 §3.2 — no JS-based viewer, native browser is better)
+ *   - everything else → "Download" link
  */
 export function FilePreview({ fileId, className }: FilePreviewProps) {
   const query = trpc.files.getDownloadUrl.useQuery({ fileId })
@@ -39,7 +42,20 @@ export function FilePreview({ fileId, className }: FilePreviewProps) {
   const { url, mimeType, filename } = query.data
 
   if (mimeType === 'application/pdf') {
-    return <PdfViewer url={url} className={className} />
+    return (
+      <div className={className}>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          {filename}
+          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+        </a>
+      </div>
+    )
   }
 
   if (mimeType.startsWith('image/')) {
