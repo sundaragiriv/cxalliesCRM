@@ -1,3 +1,8 @@
+// React is referenced by the JSX classic transform that `tsx` uses when running
+// `scripts/verify-*.ts` outside the Next bundler (which has its own automatic
+// runtime). Keeping the explicit import makes the template runnable in both
+// contexts without depending on tsconfig.jsx.
+import React from 'react'
 import {
   Document,
   Page,

@@ -50,10 +50,14 @@ import {
 } from './invoices-schema'
 import type { FinanceTx } from '@/lib/audit/with-audit'
 
-// Phase 1: 30-day signed URL embedded in invoice emails. PROGRESS.md §7
-// tracks the Phase 2 follow-up (auth-checked route handler signs a fresh
-// URL on each access).
-const INVOICE_EMAIL_URL_TTL_SECONDS = 30 * 24 * 60 * 60
+// AWS SigV4 caps presigned URL expiry at exactly 604,800 seconds (7 days).
+// Any longer and `getSignedUrl` throws "Signature version 4 presigned URLs
+// must have an expiration date less than one week in the future". Phase 1
+// ships ~7-day URLs in invoice emails and accepts the limitation; the PDF
+// is also attached to the email, so an expired link degrades to "open the
+// attachment". PROGRESS.md §7 tracks the Phase 2 follow-up: auth-checked
+// route handler that signs a fresh URL on each access (no TTL ceiling).
+const INVOICE_EMAIL_URL_TTL_SECONDS = 7 * 24 * 60 * 60 - 60
 
 const SOURCE_TABLE = 'billing_invoices'
 

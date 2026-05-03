@@ -109,8 +109,13 @@ records *why* in plain English so future sessions don't get whiplash.
   and reports its success/failure via `emailSent` / `emailMessageId` /
   `emailError` fields. Email failure does NOT roll back the committed
   send — the user retries via the **Resend** button.
-- **30-day signed URLs in invoice emails.** Phase 2 follow-up: replace
-  with auth-checked route handler that signs fresh URLs on access (see §7).
+- **~7-day signed URLs in invoice emails.** Discovered during verify
+  that AWS SigV4 caps presigned URL expiry at 604,800 seconds (7 days)
+  exactly — the original 30-day plan was physically impossible. MinIO
+  enforces the same cap. The PDF is also attached, so an expired link
+  degrades to "open the attachment" rather than failing. Phase 2 replaces
+  this with an auth-checked route handler (`/api/invoices/:id/pdf`) that
+  signs fresh URLs on access — no TTL ceiling. See §7.
 - **Brand → accent hex map is in code** (`_invoice-pdf-payload.ts`).
   P1-25 migrates this to an `accent_hex` column on `brands`.
 - **`Mark as sent` button renamed to `Send invoice`.**
@@ -311,11 +316,12 @@ until their target phase, but useful context.
   Phase 1
 - **Per-line back-reference for expense → invoice line** (currently
   table-level via `expense_entries.invoice_id`)
-- **Auth-checked invoice PDF route** to replace 30-day signed URLs in
-  outbound emails. P1-14 ships 30-day URLs as the pragmatic Phase 1
-  call; Phase 2 introduces `/api/invoices/:id/pdf` that checks auth and
-  signs a fresh URL on each access. Eliminates the "email link expires
-  after 30 days" footgun for clients who archive invoices.
+- **Auth-checked invoice PDF route** to replace ~7-day signed URLs in
+  outbound emails. P1-14 wanted 30-day TTLs but AWS SigV4 caps presigned
+  URLs at 7 days (hard SDK enforcement, MinIO same). Phase 2 introduces
+  `/api/invoices/:id/pdf` that checks auth and signs a fresh URL on each
+  access — no TTL ceiling. Until then: PDF stays attached to the email,
+  link "stays live for one week" per the email body copy.
 - **Postmark sender domain verification** (DKIM/SPF/DMARC). P1-14 ships
   against the `POSTMARK_API_TEST` sandbox token. Production deploy at
   P1-26 needs a real verified sender domain — `invoices@cxallies.com` or

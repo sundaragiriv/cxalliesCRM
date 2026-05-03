@@ -212,10 +212,19 @@ optional `version` segment to the helper.
 
 ### 6.3 Signed URL TTL for invoice emails
 
-Phase 1 ships **30-day signed URLs** in invoice emails. Tracked as a
-follow-up in `docs/PROGRESS.md` §7 — Phase 2 replaces this with an
-auth-checked route handler (`/api/invoices/:id/pdf`) that signs a fresh
-URL on access.
+Phase 1 ships **~7-day signed URLs** in invoice emails. AWS Signature
+Version 4 caps presigned URL expiry at exactly 604,800 seconds (7 days);
+any longer throws at signing time. Discovered during P1-14 verify run —
+the original 30-day plan is physically impossible with the S3 SigV4
+signer, and MinIO (the dev R2 substitute) enforces the same cap.
+
+The PDF is also delivered as a file attachment, so a stale link
+degrades to "open the attachment" rather than a hard failure. The
+in-email body copy says "stays live for one week."
+
+Tracked as a follow-up in `docs/PROGRESS.md` §7 — Phase 2 replaces this
+with an auth-checked route handler (`/api/invoices/:id/pdf`) that signs
+a fresh URL on access. With the route handler, there's no TTL ceiling.
 
 ### 6.4 Dev / prod parity
 

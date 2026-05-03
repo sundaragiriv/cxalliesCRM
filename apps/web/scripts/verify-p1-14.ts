@@ -201,14 +201,14 @@ async function main() {
       })
       .where(eq(invoices.id, invoice.id))
 
-    // ---- 5. Generate signed URL ----
-    const v1SignedUrl = await presignedDownloadUrl(v1Key, 30 * 24 * 60 * 60)
+    // ---- 5. Generate signed URL (AWS SigV4 max = 7 days). ----
+    const v1SignedUrl = await presignedDownloadUrl(v1Key, 7 * 24 * 60 * 60 - 60)
     assert(v1SignedUrl.startsWith('http'), 'signed URL should be http(s)')
     assert(
       v1SignedUrl.includes('X-Amz-Signature') || v1SignedUrl.includes('Signature'),
       'signed URL should carry an AWS-style signature',
     )
-    console.log(`  ✓ presigned URL generated (TTL 30 days)`)
+    console.log(`  ✓ presigned URL generated (TTL 7 days — AWS SigV4 max)`)
 
     // ---- 6. Build email body ----
     const totalDisplay = '$500.00'
@@ -332,18 +332,21 @@ async function main() {
     console.log(`  ✓ final state: pdf_version=2, status=sent, sent_at preserved`)
 
     // ---- Cleanup ----
+    // Delete order matters: invoices.pdf_file_id FKs into files, so invoices
+    // must drop first; lines cascade off invoices via ON DELETE CASCADE but we
+    // delete them explicitly to keep the verify's footprint visible.
     if (!originalPartyEmail) {
       await tx.execute(
         sql`UPDATE parties SET primary_email = NULL WHERE id = ${partyId}`,
       )
     }
-    if (createdFileIds.length) {
-      await tx.delete(files).where(inArray(files.id, createdFileIds))
-    }
     await tx
       .delete(invoiceLines)
       .where(inArray(invoiceLines.invoiceId, createdInvoiceIds))
     await tx.delete(invoices).where(inArray(invoices.id, createdInvoiceIds))
+    if (createdFileIds.length) {
+      await tx.delete(files).where(inArray(files.id, createdFileIds))
+    }
     if (createdProjectIds.length) {
       await tx.delete(projects).where(inArray(projects.id, createdProjectIds))
     }

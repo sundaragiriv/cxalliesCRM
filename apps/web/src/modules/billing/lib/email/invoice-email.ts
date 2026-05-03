@@ -87,7 +87,7 @@ export function buildInvoiceEmail(input: InvoiceEmailInput): InvoiceEmail {
             <tr>
               <td style="padding:8px 32px 24px 32px;">
                 <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.5;text-align:center;">
-                  The PDF is attached to this email and also available at the link above for 30 days.
+                  The PDF is attached to this email. The link above stays live for one week — after that, open the attachment or reply to request a fresh link.
                 </p>
               </td>
             </tr>
@@ -113,7 +113,7 @@ export function buildInvoiceEmail(input: InvoiceEmailInput): InvoiceEmail {
     input.notes ? `Note from sender:\n${input.notes}\n` : null,
     `View invoice: ${input.pdfViewUrl}`,
     '',
-    'The PDF is attached to this email and also available at the link above for 30 days.',
+    'The PDF is attached to this email. The link above stays live for one week.',
     '',
     `— ${input.brandDisplayName} (${input.orgLegalName})`,
   ]
