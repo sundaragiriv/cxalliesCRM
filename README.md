@@ -48,7 +48,14 @@ CI runs `typecheck + lint + test` on every push and PR to `main` (`.github/workf
 
 ## Status
 
-**Phase 1 — Foundation.** Currently planning complete; build starts at ticket P1-01.
+**Phase 1 — Foundation.** 14 of 27 mainline tickets shipped (P1-01
+through P1-14). Currently in flight: **P1-15a** (organization-scoped
+email configuration — architectural correction to P1-14, codified in
+[ADR-0007](./docs/adr/0007-organization-scoped-config-over-env-vars.md)).
+
+For day-to-day status (commit hashes, spec deviations, open follow-ups),
+read [`docs/PROGRESS.md`](./docs/PROGRESS.md) — the living catch-up doc
+maintained alongside every shipped ticket per its §8 protocol.
 
 ## Tech stack (locked)
 

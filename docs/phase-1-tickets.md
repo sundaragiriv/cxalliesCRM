@@ -1050,6 +1050,13 @@ than after multi-tenant or per-brand sender lands. Codified in
 
 **Total: 27 tickets across 6 weeks.**
 
+**Plus one slot-in correction:** **P1-15a** (organization-scoped email
+config), inserted between P1-14 and P1-15 to fix the env-var coupling
+identified during P1-14 review. Codified in
+[ADR-0007](adr/0007-organization-scoped-config-over-env-vars.md). The
+"a" suffix marks it as architectural correction rather than mainline
+sequence — the canonical 27-count stands.
+
 ---
 
 ## What's missing? What's wrong? What do we do next?

@@ -31,7 +31,7 @@
 | Files | Cloudflare R2 + Google Drive | Dual-source per ADR-0004 |
 | Background jobs | pg-boss → Inngest | Postgres-native first |
 | Testing | Vitest + Playwright | Unit + E2E |
-| PDF | react-pdf | Invoices, pay stubs, reports |
+| PDF | @react-pdf/renderer | Server-side PDF generation. See ADR-0006. (No in-app viewer; native browser via signed URL.) |
 | Charts | Recharts | Dashboards |
 | AI | Anthropic + OpenAI | Provider-abstracted via `ai/lib/providers/` |
 | Hosting | Vercel + Railway | Vercel for app, Railway for Postgres + worker |
