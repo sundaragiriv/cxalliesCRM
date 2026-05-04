@@ -71,6 +71,12 @@ export default [
       'apps/web/src/lib/auth.ts',
       'apps/web/src/lib/auth/**/*.ts',
       'apps/web/src/lib/audit/**/*.ts',
+      // Email is a cross-cutting concern: the resolver in
+      // `lib/email/from-org.ts` reads the `organizations` row to produce
+      // the From identity (per ADR-0007). Same rationale as `lib/auth/`
+      // and `lib/audit/` — top-level libs that bridge multiple modules
+      // and need schema access.
+      'apps/web/src/lib/email/**/*.ts',
       // Module API files cross-import other modules' schemas to satisfy
       // tRPC's read joins (e.g., finance.expenses.list joins parties for the
       // payee name). The cross-module rule still blocks api → another

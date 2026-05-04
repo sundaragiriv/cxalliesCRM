@@ -240,7 +240,17 @@ async function main() {
     const billToEmail = originalPartyEmail ?? 'verify@example.com'
     assert(typeof billToEmail === 'string', 'bill-to email is a string')
 
+    // Per ADR-0007 / P1-15a, sendEmail now requires a resolved identity.
+    // verify-p1-14 isn't testing identity resolution (verify-p1-15a does);
+    // construct a synthetic identity inline so the wrapper signature is
+    // satisfied.
     const sendResult = await sendEmail({
+      identity: {
+        fromAddress: 'verify-p1-14@cxallies.local',
+        fromName: 'CXAllies Verify',
+        messageStream: 'outbound',
+        domain: 'cxallies.local',
+      },
       to: billToEmail,
       subject: email.subject,
       htmlBody: email.htmlBody,

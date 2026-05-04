@@ -28,6 +28,7 @@
  */
 
 import { env } from '@/lib/env'
+import type { EmailIdentity } from './from-org'
 
 const POSTMARK_ENDPOINT = 'https://api.postmarkapp.com/email'
 
@@ -43,12 +44,27 @@ export type PostmarkAttachment = {
 }
 
 export type PostmarkSendInput = {
+  /**
+   * Resolved From identity for this organization. Per ADR-0007, the
+   * caller looks this up via `getEmailIdentity(tx, orgId)` inside its
+   * transaction so a misconfigured org fails before the action commits.
+   */
+  identity: EmailIdentity
+  /**
+   * Phase 2 seam for per-brand sender. When `brands` gains
+   * `email_sender_address`, callers will resolve the brand-level identity
+   * and pass it here; today this parameter is accepted but the wrapper
+   * does not branch on it (the override, when set, simply replaces the
+   * `identity` payload's address/name pair). Leaving the seam in place
+   * avoids a sendInvoice signature churn in Phase 2.
+   */
+  fromOverride?: { fromAddress: string; fromName: string }
   to: string
   subject: string
   htmlBody: string
   textBody: string
   attachments?: PostmarkAttachment[]
-  /** Optional reply-to override; defaults to the From address. */
+  /** Optional reply-to override; defaults to the resolved From address. */
   replyTo?: string
   /** Tag for Postmark dashboard filtering — use the action name, e.g. 'invoice-send'. */
   tag?: string
@@ -112,7 +128,12 @@ function classify(errorCode: number): {
 }
 
 export async function sendEmail(input: PostmarkSendInput): Promise<PostmarkResult> {
-  const from = `${env.POSTMARK_FROM_NAME} <${env.POSTMARK_FROM_ADDRESS}>`
+  // Per ADR-0007: From identity is org-scoped (via input.identity), not env-driven.
+  // The fromOverride seam reserves the Phase 2 per-brand sender path; today it
+  // simply substitutes for identity.fromAddress / .fromName when provided.
+  const fromAddress = input.fromOverride?.fromAddress ?? input.identity.fromAddress
+  const fromName = input.fromOverride?.fromName ?? input.identity.fromName
+  const from = `${fromName} <${fromAddress}>`
 
   const payload = {
     From: from,
@@ -120,8 +141,8 @@ export async function sendEmail(input: PostmarkSendInput): Promise<PostmarkResul
     Subject: input.subject,
     HtmlBody: input.htmlBody,
     TextBody: input.textBody,
-    MessageStream: env.POSTMARK_MESSAGE_STREAM,
-    ReplyTo: input.replyTo ?? env.POSTMARK_FROM_ADDRESS,
+    MessageStream: input.identity.messageStream,
+    ReplyTo: input.replyTo ?? fromAddress,
     Tag: input.tag,
     Metadata: input.metadata,
     Attachments: input.attachments,

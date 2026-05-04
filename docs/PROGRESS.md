@@ -4,7 +4,7 @@
 authoritative status doc — updated after every shipped ticket. Pairs with
 `docs/phase-1-tickets.md` (the spec) and `docs/03-conventions.md` (the rules).
 
-Last updated: **2026-05-02** after P1-14 (in flight; awaits migration apply).
+Last updated: **2026-05-03** after P1-15a (org-scoped email config + ADR-0007).
 
 ---
 
@@ -12,7 +12,8 @@ Last updated: **2026-05-02** after P1-14 (in flight; awaits migration apply).
 
 **Branch:** `main` · **Latest commit:** `8a33b33` · **Working tree:** clean
 
-**Phase 1 status:** 14 of 27 tickets shipped (P1-14 in flight; pending migration apply + verify run). **Up next: P1-15** (R2 setup + Drive picker).
+**Phase 1 status:** 14 of 27 mainline tickets shipped, plus P1-15a (slot-in
+correction). **Up next: P1-15** (R2 setup + Drive picker).
 
 | Ticket | Status | Commit | Brief |
 |---|---|---|---|
@@ -23,7 +24,8 @@ Last updated: **2026-05-02** after P1-14 (in flight; awaits migration apply).
 | P1-11 | ✅ | `2530f3b` | billing + crm schemas + cross-module FKs + deal-stage templates |
 | P1-12 | ✅ | `0fbe1ac` | time entries + weekly timesheet workflow |
 | P1-13 | ✅ | `8a33b33` | invoicing + project CRUD + payment posting |
-| P1-14 | ✅ | (this branch) | invoice PDF (@react-pdf/renderer) + Postmark email + ADR-0006 |
+| P1-14 | ✅ | `075dcd8` + `0637064` | invoice PDF (@react-pdf/renderer) + Postmark email + ADR-0006 |
+| P1-15a | ✅ | (this branch) | org-scoped email config + ADR-0007; env vars become bootstrap-only |
 | P1-15 | ⏳ next | — | R2 production + Drive picker |
 | P1-16 → P1-27 | ⏳ | — | see `phase-1-tickets.md` |
 
@@ -119,6 +121,63 @@ records *why* in plain English so future sessions don't get whiplash.
 - **Brand → accent hex map is in code** (`_invoice-pdf-payload.ts`).
   P1-25 migrates this to an `accent_hex` column on `brands`.
 - **`Mark as sent` button renamed to `Send invoice`.**
+
+### P1-15a (organization-scoped email configuration)
+- **ADR-0007 codifies the env-vs-DB line.** Tenant identity (sender
+  domain, address, name, message stream) lives in DB rows. Env vars are
+  reserved for deployment-environment config (secrets, connection
+  strings, deployment topology). Env vars MAY bootstrap seed scripts;
+  once seeded, the application reads from DB, never from env at
+  runtime. The line is principled — tenant-facing → row, deployment
+  credential → env. This is now the binding pattern for all future
+  tenant-facing config (locale, branding, billing identity, etc.).
+- **Correction to P1-14, not an additive feature.** P1-14 wired
+  `POSTMARK_FROM_ADDRESS` / `POSTMARK_FROM_NAME` /
+  `POSTMARK_MESSAGE_STREAM` as runtime env reads. P1-15a moves them to
+  the `organizations` row; the env vars remain as **optional**
+  bootstrap-only inputs to the seed script.
+- **Migration 0020 is schema-only.** Adds four columns to
+  `organizations`: `email_sender_domain`, `email_sender_address`,
+  `email_sender_name` (all nullable), and
+  `postmark_message_stream text NOT NULL DEFAULT 'outbound'`. The
+  bootstrap-from-env happens in `db/seed/01-organizations.ts`, not in
+  the migration body — SQL can't read env, and the seed already runs
+  per-install.
+- **Resolver: `lib/email/from-org.ts` `getEmailIdentity(tx, orgId)`.**
+  Mirrors the shape of `findRevenueAccountForBusinessLine` (P1-13) and
+  `findSystemAccount` (P1-08). Throws `MissingOrgEmailConfigError`
+  with `fieldErrors` for the form. `sendInvoice` calls this **inside**
+  the tx, BEFORE the journal post, so a misconfigured org fails fast.
+- **`sendEmail` signature changed** to require an `identity` payload
+  (resolved via `getEmailIdentity` by the caller). New optional
+  `fromOverride` parameter is the **Phase 2 seam for per-brand sender** —
+  accepted today but not branched on. When `brands` gains
+  `email_sender_address`, the brand-first / org-fallback resolver lands
+  behind this seam without changing `sendInvoice`.
+- **Production-token guard.** `lib/env.ts` schema-level `superRefine`
+  forbids `POSTMARK_API_TEST` when `NODE_ENV=production`. Catches the
+  realistic misconfig where the sandbox token leaks into a prod env file.
+- **Seed is idempotent.** First install populates the four columns from
+  env (or placeholders if env unset). Re-running seed against an
+  existing org only backfills NULL columns — never overwrites values
+  the owner has edited via Settings UI.
+- **Settings UI.** `/settings/organization/email` (Server Component
+  shell + Client form, react-hook-form + zod resolver). Owner role
+  only via `parties.admin` permission. Edits go through
+  `defineAction` + `withAudit`, so changes write an `audit_log` row.
+- **Verify script's load-bearing assertion is fetch interception.**
+  `verify-p1-15a` stubs `globalThis.fetch`, calls `sendEmail` with an
+  identity resolved via `getEmailIdentity`, and asserts the captured
+  request body's `From` header matches the org row — not the env var.
+  Mutating the row produces a different `From` on the next send (proves
+  DB-driven, not cached). A code-wiring assertion (grep on the action
+  source) confirms `getEmailIdentity` is called BEFORE
+  `postInvoiceJournal` in the source ordering, complementing the
+  runtime null-column check that produces zero journal entries.
+- **Module ownership note.** `organizations` lives in `parties/schema.ts`
+  (the parties module owns the table — it's the spine the rest of the
+  data model FKs into). The original ticket framing said "auth"; the
+  P1-15a entry corrected this. tRPC namespace follows: `parties.organization.getEmailConfig`.
 
 ### P1-13 (invoicing)
 - **Org-wide invoice numbering** `INV-YYYY-NNNN` (per §3.12) — NOT the
@@ -225,6 +284,30 @@ For tenant-customizable workflows where Phase 1 ships sensible defaults:
 Used for: Chart of Accounts (P1-06), deal stages (P1-11). Future targets
 in §3.11.
 
+### Org-scoped configuration resolver (P1-15a, codified in ADR-0007)
+The pattern for tenant-facing configuration that varies per organization:
+
+1. **Schema column** on `organizations` (or `brands` / `business_lines`
+   for finer-grained scope) — never an enum, never an env var.
+2. **Resolver** in `lib/{topic}/from-org.ts` exporting
+   `get{Topic}(tx, orgId)` and a `Missing{Topic}Error` class with
+   `fieldErrors`. Throws when required columns are NULL.
+3. **In-tx lookup** at the top of any action that depends on the
+   resolved value — fail fast before any side-effects (journal,
+   external API call, etc.) commit.
+4. **Bootstrap from env** in the seed script at first install only;
+   re-runs only backfill NULL columns, never overwriting owner edits.
+5. **Settings UI** at `/settings/{topic}` — Server Component shell +
+   Client form via react-hook-form + zod, mutation through
+   `defineAction` + `withAudit`.
+6. **`*Override` seam** on the consumer wrapper (e.g. `sendEmail.fromOverride`)
+   reserves the future per-brand / per-record refinement without
+   churning call sites when it lands.
+
+First user: `getEmailIdentity` (P1-15a) for outbound email sender.
+Future targets: per-org tax preferences (P4 deduction model), brand
+accent color (P1-25), org-default time zone for reports (P4).
+
 ### Snapshot pattern (§3.13)
 `time_entries.billable_rate_cents` snapshots from project rate at create
 time. `invoice_lines.description`/`unit_price_cents` snapshot from time
@@ -266,6 +349,7 @@ counters approach in Phase 2.
 | 0017 | time_entries_unique_per_day | partial unique on (org, project, user, date) (P1-12) |
 | 0018 | invoice_line_revenue_account | adds `chart_of_accounts_id` to invoice lines (P1-13) |
 | 0019 | invoice_pdf_version | adds `pdf_version` int default 0 (P1-14) — per-send version tracker for invoice PDFs |
+| 0020 | organization_email_config | adds `email_sender_domain`, `email_sender_address`, `email_sender_name` (nullable) and `postmark_message_stream` (NOT NULL DEFAULT 'outbound') to `organizations` (P1-15a) — runtime From identity moves from env to row per ADR-0007 |
 
 ---
 
@@ -322,11 +406,22 @@ until their target phase, but useful context.
   `/api/invoices/:id/pdf` that checks auth and signs a fresh URL on each
   access — no TTL ceiling. Until then: PDF stays attached to the email,
   link "stays live for one week" per the email body copy.
-- **Postmark sender domain verification** (DKIM/SPF/DMARC). P1-14 ships
-  against the `POSTMARK_API_TEST` sandbox token. Production deploy at
-  P1-26 needs a real verified sender domain — `invoices@cxallies.com` or
-  `billing@varahigroup.com` (decision pending). DNS records take 24-48h
-  to propagate; start them well before P1-26.
+- **Postmark sender domain verification** (DKIM/SPF/DMARC). P1-14
+  shipped against the sandbox token; P1-15a moved the sender identity
+  fields onto the `organizations` row (per ADR-0007). The verified
+  domain string lives at `organizations.email_sender_domain`. Phase 2
+  adds the verification UI + status webhook handler; today the column
+  is informational and DKIM verification happens in the Postmark
+  dashboard. Production deploy at P1-26 still needs the chosen sender
+  domain (`invoices@cxallies.com` or `billing@varahigroup.com`) DNS-
+  configured (DKIM CNAME + Return-Path CNAME + DMARC TXT). DNS records
+  take 24-48h to propagate; start them well before P1-26.
+- **Per-brand sender.** When CXAllies and Pravara.ai need different
+  From addresses, `brands` gains its own `email_sender_address` /
+  `email_sender_name` columns and the resolver in
+  `lib/email/from-org.ts` becomes brand-first / org-fallback. The
+  `fromOverride` parameter on `sendEmail` (P1-15a) is the seam — call
+  sites don't change.
 
 ### Phase 4
 - **Standard deduction + QBI + retirement + HSA** for tax calculator —

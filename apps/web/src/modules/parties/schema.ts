@@ -51,6 +51,14 @@ export const organizations = pgTable('organizations', {
   email: text('email'),
   website: text('website'),
   logoFileId: uuid('logo_file_id'),
+  // Outbound email identity. Owned by the org row per ADR-0007 — env vars
+  // are bootstrap-only via seed; runtime always reads from here.
+  emailSenderDomain: text('email_sender_domain'),
+  emailSenderAddress: text('email_sender_address'),
+  emailSenderName: text('email_sender_name'),
+  postmarkMessageStream: text('postmark_message_stream')
+    .notNull()
+    .default('outbound'),
   ...standardLifecycle,
 })
 

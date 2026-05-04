@@ -38,6 +38,7 @@ import { buildInvoicePdfR2Key } from '../lib/invoice-pdf/r2-key'
 import { uploadBytesAsFile } from '@/modules/files/actions/upload-bytes'
 import { presignedDownloadUrl } from '@/modules/files/lib/r2'
 import { sendEmail } from '@/lib/email/postmark'
+import { getEmailIdentity } from '@/lib/email/from-org'
 import { buildInvoiceEmail } from '../lib/email/invoice-email'
 import {
   createInvoiceSchema,
@@ -465,6 +466,12 @@ export const sendInvoice = defineAction({
       throw new Error('Cannot send an invoice with $0 total')
     }
 
+    // Per ADR-0007: resolve org-scoped sender identity INSIDE the tx so a
+    // misconfigured org throws MissingOrgEmailConfigError BEFORE we post
+    // the journal or generate a PDF. Phase 2 per-brand sender will replace
+    // this with a brand-first / org-fallback resolver behind the same call.
+    const emailIdentity = await getEmailIdentity(ctx.tx, ctx.organizationId)
+
     // Bill-to must have a deliverable email.
     const [billTo] = await ctx.tx
       .select({
@@ -665,6 +672,9 @@ export const sendInvoice = defineAction({
           notes,
         })
         const result = await sendEmail({
+          identity: emailIdentity,
+          // Phase 2 seam: per-brand sender lands here without changing call sites.
+          fromOverride: undefined,
           to: billToEmail,
           subject: email.subject,
           htmlBody: email.htmlBody,

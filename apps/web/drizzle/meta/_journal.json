@@ -141,6 +141,13 @@
       "when": 1778467200000,
       "tag": "0019_invoice_pdf_version",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778553600000,
+      "tag": "0020_organization_email_config",
+      "breakpoints": true
     }
   ]
 }
