@@ -4,7 +4,7 @@
 authoritative status doc — updated after every shipped ticket. Pairs with
 `docs/phase-1-tickets.md` (the spec) and `docs/03-conventions.md` (the rules).
 
-Last updated: **2026-05-03** after P1-15a (org-scoped email config + ADR-0007).
+Last updated: **2026-05-27** after ADR-0008 (AI opt-in, not core) + spec deferrals.
 
 ---
 
@@ -12,8 +12,12 @@ Last updated: **2026-05-03** after P1-15a (org-scoped email config + ADR-0007).
 
 **Branch:** `main` · **Latest commit:** `8a33b33` · **Working tree:** clean
 
-**Phase 1 status:** 14 of 27 mainline tickets shipped, plus P1-15a (slot-in
-correction). **Up next: P1-15** (R2 setup + Drive picker).
+**Phase 1 status:** 14 of 27 mainline tickets shipped, plus P1-15a
+(slot-in correction). **P1-20 + P1-23 deferred to Phase 2+ per
+[ADR-0008](adr/0008-ai-opt-in-not-core.md);** P1-23 replaced by
+**P1-23-alt** (memorized transactions, rule-based — no LLM calls in
+Phase 1). **Up next: P1-16** (Parties full CRUD); P1-15 (R2 + Drive
+picker) runs in parallel pending owner-side Google OAuth provisioning.
 
 | Ticket | Status | Commit | Brief |
 |---|---|---|---|
@@ -121,6 +125,36 @@ records *why* in plain English so future sessions don't get whiplash.
 - **Brand → accent hex map is in code** (`_invoice-pdf-payload.ts`).
   P1-25 migrates this to an `accent_hex` column on `brands`.
 - **`Mark as sent` button renamed to `Send invoice`.**
+
+### Mid-stream (ADR-0008): AI deferred from Phase 1
+- **Decision:** AI features are opt-in, not core. P1-20 (AI substrate)
+  and P1-23 (AI expense categorization) deferred to Phase 2+. P1-23
+  replaced in Phase 1 by **P1-23-alt** (memorized transactions,
+  rule-based — QuickBooks pattern).
+- **Why:** Operator-pays per-call LLM economics don't fit a $300K–$5M
+  SMB use case; forcing customers to bring their own keys adds
+  onboarding friction; for "rhythmic operations" (invoicing, expense
+  entry, time tracking, payments) AI adds latency, hallucination risk,
+  and external failure modes without changing the work product. Rule-
+  based vendor → account suggestion solves 80%+ of the categorization
+  value for $0 per call.
+- **Substrate without features is dead weight.** Locking the AI
+  substrate's interface shape (`runFeature`, suggestion panel, budget
+  enforcement) without a real consumer feature is a guess. The shape
+  will be re-derived from the first real Phase 2+ AI use case.
+- **Phase 1 ships zero LLM calls.** No `ANTHROPIC_API_KEY` or
+  `OPENAI_API_KEY` in `lib/env.ts`. No `ai_runs` / `ai_suggestions` /
+  `ai_features` tables. No `<AiSuggestionPanel>` component.
+- **Spec files preserved** at `docs/specs/P1-20.md` and
+  `docs/specs/P1-23.md` with deferred annotations. New spec at
+  `docs/specs/P1-23-alt.md`. The `ai` module remains in the
+  architecture's 12-module list — empty in Phase 1, same as
+  `support`, `marketing`, `payroll`.
+- **RAG-over-tenant-data is the preferred shape if AI lands at all.**
+  pgvector is already in the stack. Local embeddings, tenant-scoped
+  vector search — zero per-call cost, never leaves the tenant
+  boundary. This shape is decided per-feature when each AI feature is
+  actually proposed; ADR-0008 doesn't pre-commit to it.
 
 ### P1-15a (organization-scoped email configuration)
 - **ADR-0007 codifies the env-vs-DB line.** Tenant identity (sender
@@ -284,6 +318,35 @@ For tenant-customizable workflows where Phase 1 ships sensible defaults:
 Used for: Chart of Accounts (P1-06), deal stages (P1-11). Future targets
 in §3.11.
 
+### Learn-from-history rule-based suggestion (P1-23-alt, codified by ADR-0008)
+When a Phase 1 problem looks like it wants AI, the first question is:
+*does the user's own history already encode the answer?* For expense
+categorization, the answer is yes — the vendor → account mapping lives
+in `expense_entries` and a `GROUP BY chart_of_accounts_id ORDER BY count
+DESC, last_used DESC LIMIT 1` is the suggestion.
+
+The pattern shape:
+
+1. **Query the tenant's own data** for the relevant signal (frequency,
+   recency, last-used).
+2. **Surface as a pre-fill, not a popup.** The dropdown gets a default;
+   manual override is always available; the user is never blocked.
+3. **Show the rationale honestly** — *"Suggested from your last use
+   with this vendor — {N} prior expenses."* No confidence scores, no
+   black box. The user trusts what they can see.
+4. **Return `null` cleanly when there's no signal.** First-time
+   vendors / new accounts / empty history get a clean empty form, not a
+   wrong guess.
+
+Future Phase 1 / Phase 2 targets where this applies:
+- **Memorized invoice lines** (project → description / unit_price snapshot from prior invoices)
+- **Memorized timesheet descriptions** (project → recent description completions)
+- **Memorized payment methods** (party → most-used method on prior payments)
+
+The honest version of "AI suggests X" almost always reduces to
+"history shows X." Reach for the latter first; reopen ADR-0008 only
+when audit data shows the rule-based version is genuinely insufficient.
+
 ### Org-scoped configuration resolver (P1-15a, codified in ADR-0007)
 The pattern for tenant-facing configuration that varies per organization:
 
@@ -429,6 +492,26 @@ until their target phase, but useful context.
 - **Tax line items on invoices** — `tax_cents` and
   `tax_rate_basis_points` already in schema, unused
 - **Schedule C export**
+
+### Phase 2+ (AI, deferred from Phase 1 per ADR-0008)
+- **AI features become opt-in capability.** `organizations.ai_enabled`
+  toggle (default FALSE). Customers bring their own keys (encrypted at
+  rest per a future ADR — same shape as ADR-0004 §3.4's OAuth-token
+  reference) OR AI becomes a paid add-on with operator-supplied keys.
+  Economics decided when there's real tenant demand to inform them.
+- **AI substrate's shape derived from the first real consumer feature.**
+  Don't pre-build a generic `runFeature` interface — let the first
+  feature's spec drive whether RAG, structured output, or agentic is
+  the right shape.
+- **RAG over tenant data is the preferred direction.** pgvector is
+  already in the stack; tenant-scoped local embeddings + vector search
+  produce more relevant results than calling an external model with no
+  tenant context, at ~$0 per query after one-shot embedding generation.
+- **Re-evaluate the AI categorizer (P1-23) specifically** based on
+  audit data from P1-23-alt: how often is the rule-based suggestion
+  accepted vs overridden? Where does it miss? If it misses often, an
+  AI fallback for genuinely-novel vendors becomes defensible. If
+  acceptance is high, no AI needed.
 
 ### Phase 5
 - **pg-boss async recompute** — swap call sites where Phase 1 calls

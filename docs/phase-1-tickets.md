@@ -765,8 +765,15 @@ than after multi-tenant or per-brand sender lands. Codified in
 
 ---
 
-### P1-20: AI substrate (no features yet)
-**Goal:** AI module schema, provider abstraction, budget enforcement, audit logging — all wired but no user-visible AI features.
+### P1-20: AI substrate (no features yet) — ⛔ DEFERRED to Phase 2+
+**Status:** Deferred per [ADR-0008](adr/0008-ai-opt-in-not-core.md). AI is
+opt-in, not core to Phase 1. The full original scope below is preserved
+for re-use at the time AI lands, but the substrate's shape will be
+re-derived from the *first real consumer feature* in Phase 2+, not
+pre-built. See [`specs/P1-20.md`](specs/P1-20.md) (also annotated as
+deferred).
+
+**Goal (original — for reference only):** AI module schema, provider abstraction, budget enforcement, audit logging — all wired but no user-visible AI features.
 **Module:** ai
 **Depends on:** P1-04
 
@@ -862,8 +869,13 @@ than after multi-tenant or per-brand sender lands. Codified in
 
 ---
 
-### P1-23: First AI feature — expense categorization
-**Goal:** When the owner creates an expense without an account_id, AI suggests one. The owner accepts or rejects with one click.
+### P1-23: First AI feature — expense categorization — ⛔ DEFERRED to Phase 2+
+**Status:** Deferred per [ADR-0008](adr/0008-ai-opt-in-not-core.md).
+Replaced in Phase 1 by **P1-23-alt** (memorized transactions, rule-based)
+— see entry below. The original AI-driven scope is preserved for
+reference at [`specs/P1-23.md`](specs/P1-23.md).
+
+**Goal (original — for reference only):** When the owner creates an expense without an account_id, AI suggests one. The owner accepts or rejects with one click.
 **Module:** ai, finance
 **Depends on:** P1-20, P1-07
 
@@ -890,6 +902,43 @@ than after multi-tenant or per-brand sender lands. Codified in
 - [ ] Accept applies the categorization and writes to audit log
 - [ ] Reject marks rejected and the suggestion disappears
 - [ ] Cost recorded in `ai_runs`, attributed to `finance` module budget
+
+---
+
+### P1-23-alt: Memorized transactions (rule-based vendor → account suggestion)
+**Goal:** When the owner creates an expense, the system suggests the
+Chart of Accounts entry they've used most often for that vendor. Same
+UX outcome as the deferred AI categorizer, with zero LLM calls — the
+QuickBooks "memorized transactions" pattern, learned from the user's
+own expense history.
+**Module:** finance
+**Depends on:** P1-07 (expense CRUD), P1-16 (vendor party picker).
+**Replaces:** P1-23 per [ADR-0008](adr/0008-ai-opt-in-not-core.md).
+**Full spec:** [`specs/P1-23-alt.md`](specs/P1-23-alt.md).
+
+**Scope (summary — full detail in the spec file):**
+- `modules/finance/lib/suggest-account-for-vendor.ts` — pure query:
+  GROUP BY `chart_of_accounts_id`, ORDER BY count DESC, last-used DESC,
+  LIMIT 1. Returns `null` for first-time vendors.
+- tRPC `finance.expenses.suggestAccountForVendor` — read query, no mutation.
+- `ExpenseForm` integration: on vendor change, pre-fill the account
+  dropdown if empty. Manual override always wins.
+- Hint label: *"Suggested from your last use with this vendor — {N} prior expenses."*
+- Unit test + verify script per the discipline established in P1-09+.
+
+**Out of scope:**
+- Per-user defaults (Phase 2 if needed)
+- Cross-vendor category classifiers (Phase 2 if needed)
+- A dedicated `expense_vendor_defaults` table (Phase 2 if the GROUP BY
+  query proves slow)
+- AI fallback for first-time vendors (Phase 2+ per ADR-0008's review trigger)
+
+**Acceptance:**
+- [ ] Expense form pre-fills account on familiar vendor, leaves it empty on new vendor
+- [ ] Manual override never blocked
+- [ ] Soft-deleted history excluded from the suggestion
+- [ ] 5-minute test: 3 expenses for "Verizon Wireless" → 4th pre-filled
+- [ ] No new migration, no new env vars, no new dependencies
 
 ---
 
@@ -1039,10 +1088,10 @@ than after multi-tenant or per-brand sender lands. Codified in
 | 17 | P1-17 | Project Health tile | reporting | 4 |
 | 18 | P1-18 | Executive dashboard | reporting | 4 |
 | 19 | P1-19 | Subscriptions UI | billing | 5 |
-| 20 | P1-20 | AI substrate | ai | 5 |
+| 20 | P1-20 | ⛔ AI substrate (deferred per ADR-0008) | ai | — |
 | 21 | P1-21 | Synthetic data seeding | db | 5 |
 | 22 | P1-22 | Global search | ui | 5 |
-| 23 | P1-23 | AI feature: expense categorization | ai+finance | 5 |
+| 23 | P1-23 | ⛔ AI feature: expense categorization (deferred per ADR-0008) | ai+finance | — |
 | 24 | P1-24 | PWA shell | infra | 5 |
 | 25 | P1-25 | Brand system application | ui | 6 |
 | 26 | P1-26 | Production deploy + observability | infra | 6 |
@@ -1050,12 +1099,24 @@ than after multi-tenant or per-brand sender lands. Codified in
 
 **Total: 27 tickets across 6 weeks.**
 
-**Plus one slot-in correction:** **P1-15a** (organization-scoped email
-config), inserted between P1-14 and P1-15 to fix the env-var coupling
-identified during P1-14 review. Codified in
-[ADR-0007](adr/0007-organization-scoped-config-over-env-vars.md). The
-"a" suffix marks it as architectural correction rather than mainline
-sequence — the canonical 27-count stands.
+**Plus slot-in entries:**
+
+- **P1-15a** — organization-scoped email config, inserted between
+  P1-14 and P1-15 to fix the env-var coupling identified during P1-14
+  review. Codified in
+  [ADR-0007](adr/0007-organization-scoped-config-over-env-vars.md).
+- **P1-23-alt** — memorized transactions (rule-based vendor → account
+  suggestion). **Replaces P1-23** for Phase 1 per
+  [ADR-0008](adr/0008-ai-opt-in-not-core.md). AI is opt-in, not core;
+  the QuickBooks pattern solves the same Phase 1 problem with zero
+  LLM cost. P1-20 (AI substrate) is also deferred to Phase 2+ under
+  the same ADR.
+
+The "a"/"-alt" suffixes mark architectural corrections rather than
+mainline sequence — the canonical 27-count stands as the original plan;
+the **effective Phase 1 count** is 25 mainline shipped/in-flight + 1
+slot-in + 1 replacement (P1-20 and P1-23 deferred do not contribute to
+Phase 1 work).
 
 ---
 
